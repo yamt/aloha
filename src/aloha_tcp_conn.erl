@@ -100,6 +100,8 @@ setopt({packet, raw}, State) ->
     State;
 setopt({nodelay, true}, State) ->
     State;
+setopt({binary, true}, State) ->
+    State;
 setopt({active, Mode}, State) ->
     State#tcp_state{active = Mode};
 setopt(Opt, _State) ->
