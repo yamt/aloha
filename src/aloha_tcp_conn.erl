@@ -223,7 +223,8 @@ trim(Syn, Data, 1, Seq, WinStart, WinEnd)
 trim(Syn, Data, 0, Seq, WinStart, WinEnd)
         when ?SEQ_LT(WinEnd, Seq + Syn + byte_size(Data)) ->
     Size = byte_size(Data),
-    Data2 = binary:part(Data, {0, Size - seq(Seq + Syn + Size - WinEnd)}),
+    TakeSize = Size - seq(Seq + Syn + Size - WinEnd),
+    <<Data2:TakeSize/bytes, _/bytes>> = Data,
     trim(Syn, Data2, 0, Seq, WinStart, WinEnd);
 trim(Syn, Data, Fin, Seq, _WinStart, _WinEnd) ->
     {Syn, Data, Fin, Seq}.
