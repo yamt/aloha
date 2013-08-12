@@ -41,8 +41,6 @@
 
 -export([controlling_process/2]).
 
--export([test_trim/0]). % XXX debug
-
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
 -behaviour(gen_server).
@@ -669,7 +667,10 @@ shutdown_sender(State) ->
 
 %% debug
 
-test_trim() ->
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+simple_test() ->
     {1, <<"hoge">>, 1, 100} = trim(1, <<"hoge">>, 1, 100, 100, 106),
     {0, <<"hoge">>, 1, 101} = trim(1, <<"hoge">>, 1, 100, 101, 106),
     {0, <<"oge">>, 1, 102} = trim(1, <<"hoge">>, 1, 100, 102, 106),
@@ -678,3 +679,5 @@ test_trim() ->
     {0, <<"og">>, 0, 102} = trim(1, <<"hoge">>, 1, 100, 102, 104),
     {0, <<>>, 1, 105} = trim(1, <<"hoge">>, 1, 100, 105, 106),
     {0, <<>>, 0, 106} = trim(1, <<"hoge">>, 1, 100, 106, 106).
+
+-endif.
