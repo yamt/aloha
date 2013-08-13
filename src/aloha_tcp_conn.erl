@@ -24,7 +24,6 @@
 
 % todo
 %  active open
-%  checksum validation
 %  exit_on_close
 %  urg
 %  delayed ack

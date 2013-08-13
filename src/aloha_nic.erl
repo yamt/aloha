@@ -48,7 +48,7 @@ enqueue_cond(Msg, true) ->
 
 handle_cast({packet, Pkt}, #state{addr=Addr}=State) ->
     lager:debug("nic receive packet ~w~n", [Pkt]),
-    {Ether, Next, Rest} = aloha_packet:decode(ether, Pkt),
+    {Ether, Next, Rest} = aloha_packet:decode(ether, Pkt, []),
     lager:debug("nic receive packet ~w ~w ~w~n", [Ether, Next, Rest]),
     Dst = Ether#ether.dst,
     BroadcastAddr = <<-1:(6*8)>>,

@@ -44,7 +44,7 @@ start() ->
 
 handle(Pkt, Stack, Opts) ->
     [Ip, _Ether] = Stack,
-    {Tcp, bin, Data} = aloha_packet:decode(tcp, Pkt),
+    {Tcp, bin, Data} = aloha_packet:decode(tcp, Pkt, Stack),
     lager:debug("TCP ~s ~w from ~w~n", [pp(Tcp), Data, Ip#ip.src]),
     handle_tcp(Tcp, Stack, Data, Opts).
 
@@ -92,7 +92,7 @@ new_connection(Tcp, Stack, Key, Opts, Listener) ->
     {ok, NewPid} = gen_server:start(aloha_tcp_conn, Opts2, []),
     NewPid.
 
-handle_tcp(#tcp{} = Tcp, Stack, Data, Opts) ->
+handle_tcp(#tcp{checksum=good} = Tcp, Stack, Data, Opts) ->
     lager:info("TCP RECV ~s", [tcp_summary(Tcp, Data)]),
     [Ip|_] = Stack,
     Key = {Ip#ip.src, Ip#ip.dst, Tcp#tcp.src_port, Tcp#tcp.dst_port},
@@ -108,7 +108,7 @@ handle_tcp(#tcp{} = Tcp, Stack, Data, Opts) ->
             gen_server:cast(Pid, {Tcp, Data})
     end;
 handle_tcp(Tcp, _Stack, _Data, _Opts) ->
-    lager:info("TCP unknown input ~w", [Tcp]).
+    lager:info("TCP bad checksum ~w", [Tcp]).
 
 % cf. RFC 1122 4.2.2.20 (b)
 make_rst(Rep, #tcp{ack = 0} = Tcp, Data) ->

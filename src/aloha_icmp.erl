@@ -28,17 +28,18 @@
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
 handle(Pkt, Stack, _Opts) ->
+    {Icmp, _Next, <<>>} = aloha_packet:decode(icmp, Pkt, Stack),
+    handle_icmp(Icmp, Stack).
+
+handle_icmp(#icmp{checksum = bad} = Icmp, _Stack) ->
+    lager:info("ICMP bad checksum ~p", [Icmp]);
+handle_icmp(#icmp{type = 8} = Icmp, Stack) ->
+    % swap src and dst
     [Ip, Ether] = Stack,
-    {Icmp, _Next, <<>>} = aloha_packet:decode(icmp, Pkt),
-    lager:info("ICMP ~w from ~w~n", [Icmp#icmp.type, Ip#ip.src]),
-    case Icmp#icmp.type of
-        8 ->  % echo request
-            % swap src and dst
-            Rep = [Ether#ether{dst = Ether#ether.src, src = Ether#ether.dst},
-                   Ip#ip{src = Ip#ip.dst, dst = Ip#ip.src},
-                   Icmp#icmp{type = 0}],  % 0 = echo reply
-            BinPkt = aloha_packet:encode_packet(Rep),
-            aloha_nic:send_packet(BinPkt);
-        _ ->
-            ok
-    end.
+    Rep = [Ether#ether{dst = Ether#ether.src, src = Ether#ether.dst},
+           Ip#ip{src = Ip#ip.dst, dst = Ip#ip.src},
+           Icmp#icmp{type = 0}],  % 0 = echo reply
+    BinPkt = aloha_packet:encode_packet(Rep),
+    aloha_nic:send_packet(BinPkt);
+handle_icmp(_Icmp, _Stack) ->
+    ok.

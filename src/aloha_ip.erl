@@ -31,15 +31,15 @@
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
 handle(Pkt, Stack, Opts) ->
-    {Ip, Next, Rest} = aloha_packet:decode(ip, Pkt),
+    {Ip, Next, Rest} = aloha_packet:decode(ip, Pkt, Stack),
     lager:debug("ip receive packet ~w ~w ~w~n", [Ip, Next, Rest]),
-    Dst = Ip#ip.dst,
     IpAddr = proplists:get_value(ip_addr, Opts),
-    Ours = case Dst of
-        IpAddr -> true;
-        _ ->
-            lager:info("not ours ~w~n", [Dst]),
-            false
-    end,
+    handle_ip(Ip, Next, Rest, IpAddr, Stack).
+
+handle_ip(#ip{checksum = bad} = Ip, _Next, _Rest, _IpAddr, _Stack) ->
+    lager:info("IP bad checksum ~p", [Ip]);
+handle_ip(#ip{dst = IpAddr} = Ip, Next, Rest, IpAddr, Stack) ->
     lager:debug("ip next ~w~n", [Next]),
-    aloha_nic:enqueue_cond({Next, Rest, [Ip|Stack]}, Ours).
+    aloha_nic:enqueue_cond({Next, Rest, [Ip|Stack]}, true);
+handle_ip(Ip, _Next, _Rest, _IpAddr, _Stack) ->
+    lager:info("not ours ~p", [Ip]).

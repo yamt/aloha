@@ -27,21 +27,22 @@
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
-handle(Pkt, _Stack, Opts) ->
+handle(Pkt, Stack, Opts) ->
+    {Arp, _Next, _Rest} = aloha_packet:decode(arp, Pkt, Stack),
     Addr = proplists:get_value(addr, Opts),
-    {Arp, _Next, _Rest} = aloha_packet:decode(arp, Pkt),
-    case Arp#arp.op of
-        1 ->  % request
-            TargetIP = Arp#arp.tpa,
-            SourceIP = Arp#arp.spa,
-            SourceHWAddr = Arp#arp.sha,
-            lager:info("arp request who-has ~w tell ~w (~w)~n",
-                [TargetIP, SourceIP, SourceHWAddr]),
-            Rep = [#ether{dst=SourceHWAddr, src=Addr, type=arp},
-                   Arp#arp{op = 2, tpa = SourceIP, tha=SourceHWAddr,
-                           spa = TargetIP, sha = Addr}],
-            BinPkt = aloha_packet:encode_packet(Rep),
-            aloha_nic:send_packet(BinPkt);
-        2 ->  % reply
-            ok
-    end.
+    handle_arp(Arp, Addr).
+
+handle_arp(#arp{op = 1} = Arp, Addr) ->
+    % request
+    TargetIP = Arp#arp.tpa,
+    SourceIP = Arp#arp.spa,
+    SourceHWAddr = Arp#arp.sha,
+    lager:info("arp request who-has ~w tell ~w (~w)~n",
+        [TargetIP, SourceIP, SourceHWAddr]),
+    Rep = [#ether{dst=SourceHWAddr, src=Addr, type=arp},
+           Arp#arp{op = 2, tpa = SourceIP, tha=SourceHWAddr,
+                   spa = TargetIP, sha = Addr}],
+    BinPkt = aloha_packet:encode_packet(Rep),
+    aloha_nic:send_packet(BinPkt);
+handle_arp(#arp{}, _Addr) ->
+    ok.
