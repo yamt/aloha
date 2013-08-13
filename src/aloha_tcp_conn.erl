@@ -227,7 +227,7 @@ trim(Syn, Data, 0, Seq, WinStart, WinEnd)
     <<Data2:TakeSize/bytes, _/bytes>> = Data,
     trim(Syn, Data2, 0, Seq, WinStart, WinEnd);
 trim(Syn, Data, Fin, Seq, _WinStart, _WinEnd) ->
-    {Syn, Data, Fin, Seq}.
+    {Syn, Data, Fin, seq(Seq)}.
 
 trim(Syn, Data, Fin, Seq, WinStart) ->
     trim(Syn, Data, Fin, Seq, WinStart, WinStart + 999999).  % XXX
@@ -671,14 +671,24 @@ shutdown_sender(State) ->
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 
-simple_test() ->
-    {1, <<"hoge">>, 1, 100} = trim(1, <<"hoge">>, 1, 100, 100, 106),
-    {0, <<"hoge">>, 1, 101} = trim(1, <<"hoge">>, 1, 100, 101, 106),
-    {0, <<"oge">>, 1, 102} = trim(1, <<"hoge">>, 1, 100, 102, 106),
-    {1, <<"hoge">>, 0, 100} = trim(1, <<"hoge">>, 1, 100, 100, 105),
-    {1, <<"hog">>, 0, 100} = trim(1, <<"hoge">>, 1, 100, 100, 104),
-    {0, <<"og">>, 0, 102} = trim(1, <<"hoge">>, 1, 100, 102, 104),
-    {0, <<>>, 1, 105} = trim(1, <<"hoge">>, 1, 100, 105, 106),
-    {0, <<>>, 0, 106} = trim(1, <<"hoge">>, 1, 100, 106, 106).
+trim_test() ->
+    ?assertEqual({1, <<"hoge">>, 1, 100},
+                 trim(1, <<"hoge">>, 1, 100, 100, 106)),
+    ?assertEqual({0, <<"hoge">>, 1, 101},
+                 trim(1, <<"hoge">>, 1, 100, 101, 106)),
+    ?assertEqual({0, <<"oge">>, 1, 102},
+                 trim(1, <<"hoge">>, 1, 100, 102, 106)),
+    ?assertEqual({1, <<"hoge">>, 0, 100},
+                 trim(1, <<"hoge">>, 1, 100, 100, 105)),
+    ?assertEqual({1, <<"hog">>, 0, 100},
+                 trim(1, <<"hoge">>, 1, 100, 100, 104)),
+    ?assertEqual({0, <<"og">>, 0, 102},
+                 trim(1, <<"hoge">>, 1, 100, 102, 104)),
+    ?assertEqual({0, <<>>, 1, 105},
+                 trim(1, <<"hoge">>, 1, 100, 105, 106)),
+    ?assertEqual({0, <<>>, 0, 106},
+                 trim(1, <<"hoge">>, 1, 100, 106, 106)),
+    ?assertEqual({0, <<"oge">>, 1, 1},
+                 trim(1, <<"hoge">>, 1, 16#ffffffff, 1, 5)).
 
 -endif.
