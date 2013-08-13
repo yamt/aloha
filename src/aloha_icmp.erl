@@ -33,12 +33,11 @@ handle(Pkt, Stack, _Opts) ->
 
 handle_icmp(#icmp{checksum = bad} = Icmp, _Stack) ->
     lager:info("ICMP bad checksum ~p", [Icmp]);
-handle_icmp(#icmp{type = 8} = Icmp, Stack) ->
-    % swap src and dst
+handle_icmp(#icmp{type = echo_request} = Icmp, Stack) ->
     [Ip, Ether] = Stack,
     Rep = [Ether#ether{dst = Ether#ether.src, src = Ether#ether.dst},
            Ip#ip{src = Ip#ip.dst, dst = Ip#ip.src},
-           Icmp#icmp{type = 0}],  % 0 = echo reply
+           Icmp#icmp{type = echo_reply}],
     BinPkt = aloha_packet:encode_packet(Rep),
     aloha_nic:send_packet(BinPkt);
 handle_icmp(_Icmp, _Stack) ->

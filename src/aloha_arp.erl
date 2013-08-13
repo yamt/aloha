@@ -32,15 +32,14 @@ handle(Pkt, Stack, Opts) ->
     Addr = proplists:get_value(addr, Opts),
     handle_arp(Arp, Addr).
 
-handle_arp(#arp{op = 1} = Arp, Addr) ->
-    % request
+handle_arp(#arp{op = request} = Arp, Addr) ->
     TargetIP = Arp#arp.tpa,
     SourceIP = Arp#arp.spa,
     SourceHWAddr = Arp#arp.sha,
     lager:info("arp request who-has ~w tell ~w (~w)~n",
         [TargetIP, SourceIP, SourceHWAddr]),
     Rep = [#ether{dst=SourceHWAddr, src=Addr, type=arp},
-           Arp#arp{op = 2, tpa = SourceIP, tha=SourceHWAddr,
+           Arp#arp{op = reply, tpa = SourceIP, tha=SourceHWAddr,
                    spa = TargetIP, sha = Addr}],
     BinPkt = aloha_packet:encode_packet(Rep),
     aloha_nic:send_packet(BinPkt);
