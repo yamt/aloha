@@ -217,6 +217,18 @@ trim(0, Data, Fin, Seq, WinStart, WinEnd) when ?SEQ_LT(Seq, WinStart) ->
     <<_:SkipSize/bytes, Data2/bytes>> = Data,
     trim(0, Data2, Fin, Seq + SkipSize, WinStart, WinEnd);
 trim(Syn, Data, 1, Seq, WinStart, WinEnd)
+    % the following guard is less obvious than it might look like.
+    % it seems that this varies among implementations.
+    % on the receive side:
+    %   rfc 793 is saying to trim an out-of-window fin.  (Page 69-70)
+    %   netbsd accepts a fin if it's immediately after the right edge of
+    %   the window.  linux drops a fin if window is closed.
+    % on the transmit side:
+    %   netbsd only counts data portion of a segment.  so it happily sends
+    %   an out-of-window fin if it's immediately after the right edge of
+    %   the peer's window.
+    %   linux honours the window and keeps sending window probes without fin.
+    % (netbsd-6 and linux-2.6.32)
         when ?SEQ_LT(WinEnd, Seq + Syn + byte_size(Data) + 1) ->
     trim(Syn, Data, 0, Seq, WinStart, WinEnd);
 trim(Syn, Data, 0, Seq, WinStart, WinEnd)
@@ -657,6 +669,7 @@ setup_reader_timeout(Timeout) ->
 %% shutdown
 
 shutdown_receiver(State) ->
+    % just close the receive window.
     State2 = State#tcp_state{rcv_buf = <<>>, rcv_buf_size = 0},
     tcp_output(State2).
 
