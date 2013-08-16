@@ -41,6 +41,7 @@
 -export([controlling_process/2]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
+-include("aloha_tcp_seq.hrl").
 
 -behaviour(gen_server).
 
@@ -51,11 +52,6 @@
                     state, owner, active = false, suppress = false,
                     pending_ctl = [], fin = 0, key,
                     writers = [], reader = none}).
-
-% these are macros so that they can be used in guards.
--define(SEQ(S), ((S) band 16#ffffffff)).
--define(SEQ_LT(S1, S2), (?SEQ((S1) - (S2)) >= 16#80000000)).
--define(SEQ_LTE(S1, S2), (not ?SEQ_LT(S2, S1))).
 
 -define(REXMIT_TIMEOUT, 1000).
 -define(PERSIST_TIMEOUT, 3000).
@@ -191,7 +187,6 @@ handle_call(get_owner_info, _From,
             #tcp_state{owner = Owner, active = Active} = State) ->
     reply({Owner, Active}, State).
 
-seq(S) -> S band 16#ffffffff.
 
 trim(Tcp, Data, #tcp_state{rcv_nxt = undefined}) ->
     {Tcp, Data};
@@ -201,53 +196,14 @@ trim(#tcp{syn = Syn, fin = Fin, seqno = Seq} = Tcp, Data,
         trim(Syn, Data, Fin, Seq, RcvNxt, RcvNxt + rcv_wnd(State)),
     {Tcp#tcp{syn = Syn2, fin = Fin2, seqno = Seq2}, Data2}.
 
-% trim out of window part of the segment
-% it's assumed that the segment is at least partially in a valid window.
-% (except the case for tcp_output)
-trim(1, Data, Fin, Seq, WinStart, WinEnd) when ?SEQ_LT(Seq, WinStart) ->
-    trim(0, Data, Fin, Seq+1, WinStart, WinEnd);
-trim(0, <<>>, 1, Seq, WinStart, WinEnd) when ?SEQ_LT(Seq, WinStart) ->
-    % for tcp_output, it's normal that snd_nxt is immediately after fin
-    trim(0, <<>>, 0, Seq + 1, WinStart, WinEnd);
-trim(0, Data, Fin, Seq, WinStart, WinEnd) when ?SEQ_LT(Seq, WinStart) ->
-    Size = byte_size(Data),
-    % for tcp_output, it's normal that snd_nxt is immediately after fin
-    SkipSize = min(Size, seq(WinStart - Seq)),
-    true = (Size + Fin >= seq(WinStart - Seq)),  % assert
-    <<_:SkipSize/bytes, Data2/bytes>> = Data,
-    trim(0, Data2, Fin, Seq + SkipSize, WinStart, WinEnd);
-trim(Syn, Data, 1, Seq, WinStart, WinEnd)
-    % the following guard is less obvious than it might look like.
-    % it seems that this varies among implementations.
-    % on the receive side:
-    %   rfc 793 is saying to trim an out-of-window fin.  (Page 69-70)
-    %   netbsd accepts a fin if it's immediately after the right edge of
-    %   the window.  linux drops a fin if window is closed.
-    % on the transmit side:
-    %   netbsd only counts data portion of a segment.  so it happily sends
-    %   an out-of-window fin if it's immediately after the right edge of
-    %   the peer's window.
-    %   linux honours the window and keeps sending window probes without fin.
-    % (netbsd-6 and linux-2.6.32)
-        when ?SEQ_LT(WinEnd, Seq + Syn + byte_size(Data) + 1) ->
-    trim(Syn, Data, 0, Seq, WinStart, WinEnd);
-trim(Syn, Data, 0, Seq, WinStart, WinEnd)
-        when ?SEQ_LT(WinEnd, Seq + Syn + byte_size(Data)) ->
-    Size = byte_size(Data),
-    TakeSize = Size - seq(Seq + Syn + Size - WinEnd),
-    <<Data2:TakeSize/bytes, _/bytes>> = Data,
-    trim(Syn, Data2, 0, Seq, WinStart, WinEnd);
-trim(Syn, Data, Fin, Seq, _WinStart, _WinEnd) ->
-    {Syn, Data, Fin, seq(Seq)}.
-
-trim(Syn, Data, Fin, Seq, WinStart) ->
-    trim(Syn, Data, Fin, Seq, WinStart, WinStart + 999999).  % XXX
+trim(A, B, C, D, E, F) -> aloha_tcp_seq:trim(A, B, C, D, E, F).
+trim(A, B, C, D, E) -> aloha_tcp_seq:trim(A, B, C, D, E).
 
 seg_len(#tcp{syn = Syn, fin = Fin}, Data) ->
     Syn + byte_size(Data) + Fin.
 
 calc_next_seq(#tcp{seqno = Seq} = Tcp, Data) ->
-    seq(Seq + seg_len(Tcp, Data)).
+    ?SEQ(Seq + seg_len(Tcp, Data)).
 
 % advance SND.UNA and truncate send buffer
 % SND.UNA < SEG.ACK =< SND.NXT
@@ -307,25 +263,10 @@ update_state(#tcp{syn = 0, fin = 1}, #tcp_state{state = established} = State) ->
 update_state(_, State) ->
     State.
 
-seq_between(S1, S2, S3) ->
-    ?SEQ_LTE(S1, S2) andalso ?SEQ_LT(S2, S3).
-
 % in-window check  RFC 793 3.3. (p.26)
 accept_check(#tcp{seqno = Seq} = Tcp, Data,
              #tcp_state{rcv_nxt = RcvNxt} = State) ->
-    accept_check(Seq, seg_len(Tcp, Data), RcvNxt, rcv_wnd(State)).
-
-accept_check(_, 1, undefined, _) ->  % accept syn
-    true;
-accept_check(Seq, 0, RcvNxt, 0) ->
-    Seq =:= RcvNxt;
-accept_check(Seq, 0, RcvNxt, RcvWnd) ->
-    seq_between(RcvNxt, Seq, RcvNxt + RcvWnd);
-accept_check(_, _, _, 0) ->
-    false;
-accept_check(Seq, SegLen, RcvNxt, RcvWnd) ->
-    seq_between(RcvNxt, Seq, RcvNxt + RcvWnd) orelse
-    seq_between(RcvNxt, Seq + SegLen + 1, RcvNxt + RcvWnd).
+    aloha_tcp_seq:accept_check(Seq, seg_len(Tcp, Data), RcvNxt, rcv_wnd(State)).
 
 process_input(#tcp{} = Tcp, Data, State) ->
     case accept_check(Tcp, Data, State) of
@@ -678,30 +619,3 @@ shutdown_sender(State) ->
     State2 = update_state_on_close(State),
     State3 = enqueue_fin(State2#tcp_state.state, State2),
     tcp_output(State3).
-
-%% debug
-
--ifdef(TEST).
--include_lib("eunit/include/eunit.hrl").
-
-trim_test() ->
-    ?assertEqual({1, <<"hoge">>, 1, 100},
-                 trim(1, <<"hoge">>, 1, 100, 100, 106)),
-    ?assertEqual({0, <<"hoge">>, 1, 101},
-                 trim(1, <<"hoge">>, 1, 100, 101, 106)),
-    ?assertEqual({0, <<"oge">>, 1, 102},
-                 trim(1, <<"hoge">>, 1, 100, 102, 106)),
-    ?assertEqual({1, <<"hoge">>, 0, 100},
-                 trim(1, <<"hoge">>, 1, 100, 100, 105)),
-    ?assertEqual({1, <<"hog">>, 0, 100},
-                 trim(1, <<"hoge">>, 1, 100, 100, 104)),
-    ?assertEqual({0, <<"og">>, 0, 102},
-                 trim(1, <<"hoge">>, 1, 100, 102, 104)),
-    ?assertEqual({0, <<>>, 1, 105},
-                 trim(1, <<"hoge">>, 1, 100, 105, 106)),
-    ?assertEqual({0, <<>>, 0, 106},
-                 trim(1, <<"hoge">>, 1, 100, 106, 106)),
-    ?assertEqual({0, <<"oge">>, 1, 1},
-                 trim(1, <<"hoge">>, 1, 16#ffffffff, 1, 5)).
-
--endif.
