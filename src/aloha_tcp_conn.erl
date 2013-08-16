@@ -249,15 +249,17 @@ update_state_on_ack(_, _, State) ->
 update_state_on_close(State) ->
     State#tcp_state{state = next_state_on_close(State#tcp_state.state)}.
 
-update_state(#tcp{rst = 1}, #tcp_state{} = State) ->
+update_state_on_flags(#tcp{rst = 1}, #tcp_state{} = State) ->
     lager:debug("closed on rst"),
     State#tcp_state{state = closed};
-update_state(#tcp{syn = 1, fin = 0}, #tcp_state{state = closed} = State) ->
+update_state_on_flags(#tcp{syn = 1, fin = 0},
+                      #tcp_state{state = closed} = State) ->
     State#tcp_state{state = syn_received};
-update_state(#tcp{syn = 0, fin = 1}, #tcp_state{state = established} = State) ->
+update_state_on_flags(#tcp{syn = 0, fin = 1},
+                      #tcp_state{state = established} = State) ->
     State2 = State#tcp_state{state = close_wait},
     deliver_to_app({tcp_closed, self_socket()}, State2);
-update_state(_, State) ->
+update_state_on_flags(_, State) ->
     State.
 
 % in-window check  RFC 793 3.3. (p.26)
@@ -270,7 +272,7 @@ process_input(#tcp{} = Tcp, Data, State) ->
         true ->
             {Tcp2, Data2} = trim(Tcp, Data, State),
             State2 = update_sender(Tcp2, State),
-            State3 = update_state(Tcp2, State2),
+            State3 = update_state_on_flags(Tcp2, State2),
             update_receiver(Tcp2, Data2, State3);
         false ->
             % out of window
