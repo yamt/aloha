@@ -192,11 +192,9 @@ trim(Tcp, Data, #tcp_state{rcv_nxt = undefined}) ->
 trim(#tcp{syn = Syn, fin = Fin, seqno = Seq} = Tcp, Data,
     #tcp_state{rcv_nxt = RcvNxt} = State) ->
     {Syn2, Data2, Fin2, Seq2} =
-        trim(Syn, Data, Fin, Seq, RcvNxt, RcvNxt + rcv_wnd(State)),
+        aloha_tcp_seq:trim(Syn, Data, Fin, Seq,
+                           RcvNxt, RcvNxt + rcv_wnd(State)),
     {Tcp#tcp{syn = Syn2, fin = Fin2, seqno = Seq2}, Data2}.
-
-trim(A, B, C, D, E, F) -> aloha_tcp_seq:trim(A, B, C, D, E, F).
-trim(A, B, C, D, E) -> aloha_tcp_seq:trim(A, B, C, D, E).
 
 seg_len(#tcp{syn = Syn, fin = Fin}, Data) ->
     Syn + byte_size(Data) + Fin.
@@ -212,7 +210,7 @@ process_ack(#tcp{ack = 1, ackno = Ack},
             ?SEQ_LT(Una, Ack) andalso ?SEQ_LTE(Ack, Nxt) ->
     lager:info("TCP ACKed ~p-~p", [Una, Ack]),
     Syn = una_syn(State),
-    {Syn2, SndBuf2, Fin2, Ack} = trim(Syn, SndBuf, Fin, Una, Ack),
+    {Syn2, SndBuf2, Fin2, Ack} = aloha_tcp_seq:trim(Syn, SndBuf, Fin, Una, Ack),
     State2 = update_state_on_ack(Syn2 =/= Syn, Fin2 =/= Fin, State),
     State3 = State2#tcp_state{snd_una = Ack, snd_buf = SndBuf2, fin = Fin2},
     process_writers(State3);
@@ -351,7 +349,8 @@ tcp_output(CanProbe,
         syn_received ->
             {0, <<>>, 0};
         _ ->
-            {S, D, F, _} = trim(0, SndBuf, State#tcp_state.fin, SndUna, SndNxt),
+            {S, D, F, _} = aloha_tcp_seq:trim(0, SndBuf, State#tcp_state.fin,
+                                              SndUna, SndNxt),
             {S, D, F}
     end,
     % probe if
@@ -368,7 +367,7 @@ tcp_output(CanProbe,
             min(SndWnd, MSS)
     end,
     {Syn2, Data2, Fin2, SndNxt} =
-        trim(Syn, Data, Fin, SndNxt, SndNxt, SndNxt + SndWnd2),
+        aloha_tcp_seq:trim(Syn, Data, Fin, SndNxt, SndNxt, SndNxt + SndWnd2),
     case AckNow orelse Syn2 =:= 1 orelse Fin2 =:= 1 orelse Data2 =/= <<>> of
         true ->
             Psh = 0, % XXX
