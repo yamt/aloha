@@ -293,8 +293,7 @@ update_receiver(_, _, State) ->
     {true, State}.
 
 segment_arrival({#tcp{ack = 0, rst = 0, syn = 1, fin = 0} = Tcp, Data},
-                State) when
-        Data =/= <<>> ->
+                State) when Data =/= <<>> ->
     segment_arrival({Tcp, <<>>}, State);  % drop data on syn segment
 segment_arrival({#tcp{ack = Ack, rst = Rst, syn = Syn} = Tcp, Data}, State) when
         Ack + Syn =:= 1 orelse Rst =:= 1 ->
