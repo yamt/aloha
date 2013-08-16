@@ -521,7 +521,7 @@ process_writers(#tcp_state{writers = [{From, _}|Rest],
         TcpState =:= fin_wait_1 orelse TcpState =:= fin_wait_2 orelse
         TcpState =:= closing orelse TcpState =:= time_wait orelse
         TcpState =:= last_ack orelse TcpState =:= closed ->
-    gen_server:reply(From, {ok, closed}),
+    gen_server:reply(From, {error, closed}),
     process_writers(State#tcp_state{writers = Rest});
 process_writers(#tcp_state{snd_buf = SndBuf,
                            snd_buf_size = SndBufSize} = State) when
