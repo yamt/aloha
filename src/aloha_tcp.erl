@@ -126,10 +126,9 @@ send_packet(Pkt, Backend) ->
     [_, _, Tcp, Data] = Pkt,
     lager:info("TCP SEND ~s", [tcp_summary(Tcp, Data)]),
     BinPkt = aloha_packet:encode_packet(Pkt),
-    {Dp, Port} = Backend,
-%   [aloha_datapath:packet_out(Dp, Port, BinPkt) ||
+%   [aloha_nic:send_packet(BinPkt, Backend) ||
 %    random:uniform() > 0.5],  % drop packets for testing
-    aloha_datapath:packet_out(Dp, Port, BinPkt).
+    aloha_nic:send_packet(BinPkt, Backend).
 
 flag(1, C) ->
     C;

@@ -25,7 +25,7 @@
 -module(aloha_nic).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
     code_change/3]).
--export([send_packet/1, enqueue_cond/2]).
+-export([send_packet/1, send_packet/2, enqueue_cond/2]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
@@ -67,8 +67,7 @@ handle_cast({Type, Pkt, Stack}, State) ->
     Mod:handle(Pkt, Stack, [{backend, State#state.backend} | State#state.prop]),
     {noreply, State};
 handle_cast({send_packet, BinPkt}, #state{backend=Backend} = State) ->
-    {Dp, Port} = Backend,
-    aloha_datapath:packet_out(Dp, Port, BinPkt),
+    send_packet(BinPkt, Backend),
     {noreply, State};
 handle_cast({set_backend, Backend}, State) ->
     {noreply, State#state{backend=Backend}};
@@ -96,3 +95,7 @@ ethertype_mod(tcp) -> aloha_tcp.
 
 send_packet(BinPkt) ->
     gen_server:cast(self(), {send_packet, BinPkt}).
+
+send_packet(BinPkt, Backend) ->
+    {M, F, A} = Backend,
+    apply(M, F, [BinPkt|A]).
