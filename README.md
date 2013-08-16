@@ -22,3 +22,18 @@ API
 aloha provides an API similar to gen_tcp/inet.
 See [aloha_demo](https://github.com/yamt/aloha_demo) for an example
 to run cowboy/ranch on aloha.
+
+TODO
+----
+
+- active open
+- exit_on_close
+- urg
+- delayed ack
+- sws avoidance
+- 2msl
+- mss option
+- call process_readers/writers on state change
+- ip/port namespace
+- ip fragment
+- timeout

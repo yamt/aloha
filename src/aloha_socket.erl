@@ -22,9 +22,6 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
-% todo
-%  connect
-
 -module(aloha_socket).
 
 -export([listen/2, accept/1]).

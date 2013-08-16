@@ -22,9 +22,6 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
-% todo
-%  ip/port namespace (per datapath/in_port?)
-
 -module(aloha_tcp).
 -export([start/0, handle/3]).
 -export([listen/2]).

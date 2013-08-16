@@ -22,16 +22,6 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
-% todo
-%  active open
-%  exit_on_close
-%  urg
-%  delayed ack
-%  sws avoidance
-%  2msl
-%  mss option
-%  call process_readers/writers on state change
-
 -module(aloha_tcp_conn).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).

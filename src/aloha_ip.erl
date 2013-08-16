@@ -22,9 +22,6 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
-% todo
-%  ip fragment
-
 -module(aloha_ip).
 -export([handle/3]).
 
