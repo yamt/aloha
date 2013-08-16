@@ -670,6 +670,7 @@ setup_reader_timeout(Timeout) ->
 
 shutdown_receiver(State) ->
     % just close the receive window.
+    % XXX this shrink the window and it makes us refuse accepting fin
     State2 = State#tcp_state{rcv_buf = <<>>, rcv_buf_size = 0},
     tcp_output(State2).
 
