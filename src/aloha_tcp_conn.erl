@@ -231,33 +231,38 @@ una_syn(_) -> 0.
 established(#tcp_state{owner = Owner} = State) ->
     lager:info("connected ~p owner ~p", [self(), Owner]),
     ok = gen_server:cast(Owner, {tcp_connected, self_socket()}),
-    State#tcp_state{state = established}.
+    set_state(established, State).
+
+set_state(New, State) ->
+    State2 = State#tcp_state{state = New},
+    State3 = process_readers(State2),
+    process_writers(State3).
 
 update_state_on_ack(true, _, #tcp_state{state = syn_received} = State) ->
     established(State);
 update_state_on_ack(true, _, #tcp_state{state = syn_sent} = State) ->
     established(State);
 update_state_on_ack(_, true, #tcp_state{state = fin_wait_1} = State) ->
-    State#tcp_state{state = fin_wait_2};
+    set_state(fin_wait_2, State);
 update_state_on_ack(_, true, #tcp_state{state = closing} = State) ->
-    State#tcp_state{state = time_wait};
+    set_state(time_wait, State);
 update_state_on_ack(_, true, #tcp_state{state = last_ack} = State) ->
-    State#tcp_state{state = closed};
+    set_state(closed, State);
 update_state_on_ack(_, _, State) ->
     State.
 
 update_state_on_close(State) ->
-    State#tcp_state{state = next_state_on_close(State#tcp_state.state)}.
+    set_state(next_state_on_close(State#tcp_state.state), State).
 
 update_state_on_flags(#tcp{rst = 1}, #tcp_state{} = State) ->
     lager:debug("closed on rst"),
-    State#tcp_state{state = closed};
+    set_state(closed, State);
 update_state_on_flags(#tcp{syn = 1, fin = 0},
                       #tcp_state{state = closed} = State) ->
-    State#tcp_state{state = syn_received};
+    set_state(syn_received, State);
 update_state_on_flags(#tcp{syn = 0, fin = 1},
                       #tcp_state{state = established} = State) ->
-    State2 = State#tcp_state{state = close_wait},
+    State2 = set_state(close_wait, State),
     deliver_to_app({tcp_closed, self_socket()}, State2);
 update_state_on_flags(_, State) ->
     State.

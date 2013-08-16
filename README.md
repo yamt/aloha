@@ -33,7 +33,6 @@ TODO
 - sws avoidance
 - 2msl
 - mss option
-- call process_readers/writers on state change
 - ip/port namespace
 - ip fragment
 - timeout
