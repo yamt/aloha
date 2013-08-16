@@ -79,33 +79,6 @@ init(Opts) ->
     lager:debug("init ~s", [pp(State)]),
     {ok, State}.
 
-setopt({packet, raw}, State) ->
-    State;
-setopt({nodelay, true}, State) ->
-    State;
-setopt({binary, true}, State) ->
-    State;
-setopt({active, Mode}, State) ->
-    State#tcp_state{active = Mode};
-setopt(Opt, _State) ->
-    lager:info("unsupported setopts ~p", [Opt]),
-    {error, einval}.
-
-setopts([], {error, _} = E, Orig) ->
-    {E, Orig};
-setopts([], State, _Orig) ->
-    {ok, State};
-setopts([H|Rest], State, Orig) ->
-    setopts(Rest, setopt(H, State), Orig).
-
-setopts(Opts, State) ->
-    setopts(Opts, State, State).
-
-should_exit(#tcp_state{state = closed, owner = none}) ->
-    true;
-should_exit(_) ->
-    false.
-
 reply(Reply, State) ->
     reply(should_exit(State), Reply, State).
 
@@ -177,6 +150,42 @@ handle_call(get_owner_info, _From,
             #tcp_state{owner = Owner, active = Active} = State) ->
     reply({Owner, Active}, State).
 
+handle_cast({#tcp{}, _} = Msg, State) ->
+    segment_arrival(Msg, State);
+handle_cast({shutdown, read}, State) ->
+    State2 = shutdown_receiver(State),
+    noreply(State2);
+handle_cast({shutdown, write}, State) ->
+    State2 = shutdown_sender(State),
+    noreply(State2);
+handle_cast(M, State) ->
+    lager:info("unknown msg ~w", [M]),
+    noreply(State).
+
+handle_info({timeout, TRef, reader_timeout},
+            #tcp_state{rcv_buf = RcvBuf,
+                       reader = {TRef, From, _, Data}} = State) ->
+    gen_server:reply(From, {error, timeout}),
+    % XXX XXX this shrinks window advertised to the peer
+    RcvBuf2 = <<Data/bytes, RcvBuf/bytes>>,
+    noreply(State#tcp_state{rcv_buf = RcvBuf2, reader = none});
+handle_info({timeout, TRef, Name},
+            #tcp_state{snd_una = Una, rexmit_timer = TRef} = State) ->
+    lager:info("timer expired ~p", [Name]),
+    State2 = State#tcp_state{snd_nxt = Una},
+    State3 = tcp_output(true, false, State2),
+    noreply(State3);
+handle_info(Info, State) ->
+    lager:info("handle_info: ~w", [Info]),
+    noreply(State).
+
+terminate(Reason, #tcp_state{key = Key} = State) ->
+    lager:debug("conn process terminate ~p~n~s", [Reason, pp(State)]),
+    true = ets:delete(aloha_tcp_conn, Key),
+    ok.
+
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
 trim(Tcp, Data, #tcp_state{rcv_nxt = undefined}) ->
     {Tcp, Data};
@@ -311,46 +320,6 @@ enqueue_fin(closed, State) ->
 enqueue_fin(_, State) ->
     State#tcp_state{fin = 1}.
 
-handle_cast({#tcp{}, _} = Msg, State) ->
-    segment_arrival(Msg, State);
-handle_cast({shutdown, read}, State) ->
-    State2 = shutdown_receiver(State),
-    noreply(State2);
-handle_cast({shutdown, write}, State) ->
-    State2 = shutdown_sender(State),
-    noreply(State2);
-handle_cast(M, State) ->
-    lager:info("unknown msg ~w", [M]),
-    noreply(State).
-
-handle_info({timeout, TRef, reader_timeout},
-            #tcp_state{rcv_buf = RcvBuf,
-                       reader = {TRef, From, _, Data}} = State) ->
-    gen_server:reply(From, {error, timeout}),
-    % XXX XXX this shrinks window advertised to the peer
-    RcvBuf2 = <<Data/bytes, RcvBuf/bytes>>,
-    noreply(State#tcp_state{rcv_buf = RcvBuf2, reader = none});
-handle_info({timeout, TRef, Name},
-            #tcp_state{snd_una = Una, rexmit_timer = TRef} = State) ->
-    lager:info("timer expired ~p", [Name]),
-    State2 = State#tcp_state{snd_nxt = Una},
-    State3 = tcp_output(true, false, State2),
-    noreply(State3);
-handle_info(Info, State) ->
-    lager:info("handle_info: ~w", [Info]),
-    noreply(State).
-
-terminate(Reason, #tcp_state{key = Key} = State) ->
-    lager:debug("conn process terminate ~p~n~s", [Reason, pp(State)]),
-    true = ets:delete(aloha_tcp_conn, Key),
-    ok.
-
-code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
-
-self_socket() ->
-    {aloha_socket, self()}.
-
 rcv_wnd(#tcp_state{rcv_buf_size = RcvBufSize, rcv_buf = RcvBuf}) ->
     max(0, RcvBufSize - byte_size(RcvBuf)).
 
@@ -438,6 +407,16 @@ tcp_output(CanProbe,
                     State
             end
     end.
+
+should_exit(#tcp_state{state = closed, owner = none}) ->
+    true;
+should_exit(_) ->
+    false.
+
+%%%%%%%%%%%%%%%%%%%% user interface %%%%%%%%%%%%%%%%%%%%
+
+self_socket() ->
+    {aloha_socket, self()}.
 
 %% controlling_process
 
@@ -609,3 +588,27 @@ shutdown_sender(State) ->
     State2 = update_state_on_close(State),
     State3 = enqueue_fin(State2#tcp_state.state, State2),
     tcp_output(State3).
+
+%% setopt
+
+setopt({packet, raw}, State) ->
+    State;
+setopt({nodelay, true}, State) ->
+    State;
+setopt({binary, true}, State) ->
+    State;
+setopt({active, Mode}, State) ->
+    State#tcp_state{active = Mode};
+setopt(Opt, _State) ->
+    lager:info("unsupported setopts ~p", [Opt]),
+    {error, einval}.
+
+setopts([], {error, _} = E, Orig) ->
+    {E, Orig};
+setopts([], State, _Orig) ->
+    {ok, State};
+setopts([H|Rest], State, Orig) ->
+    setopts(Rest, setopt(H, State), Orig).
+
+setopts(Opts, State) ->
+    setopts(Opts, State, State).
