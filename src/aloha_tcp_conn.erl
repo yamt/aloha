@@ -362,10 +362,7 @@ tcp_output(CanProbe,
            AckNow,
            #tcp_state{snd_una = SndUna,
                       snd_nxt = SndNxt,
-                      snd_wnd = SndWnd,
-                      rcv_nxt = RcvNxt,
-                      backend = Backend,
-                      template = [Ether, Ip, TcpTmpl]} = State) ->
+                      snd_wnd = SndWnd} = State) ->
     {Syn, Data, Fin} = to_send(State),
     % probe if
     %   1. window is closed
@@ -384,33 +381,13 @@ tcp_output(CanProbe,
         aloha_tcp_seq:trim(Syn, Data, Fin, SndNxt, SndNxt, SndNxt + SndWnd2),
     case AckNow orelse Syn2 =:= 1 orelse Fin2 =:= 1 orelse Data2 =/= <<>> of
         true ->
-            Psh = 0, % XXX
-            Tcp = TcpTmpl#tcp{
-                seqno = SndNxt,
-                ackno = RcvNxt,
-                syn = Syn2,
-                fin = Fin2,
-                ack = 1,
-                psh = Psh,
-                window = rcv_wnd(State),
-                options = <<>>
-            },
-            Pkt = [
-                Ether,
-                Ip,
-                Tcp,
-                Data2
-            ],
-            lager:debug("TCP send datalen ~p~n~s~n~s",
-                        [byte_size(Data2), pp(Tcp), pp(State)]),
-            aloha_tcp:send_packet(Pkt, Backend),
-            State2 = case NeedProbe of
+            State2 = build_and_send_packet(Syn2, Data2, Fin2, State),
+            State3 = case NeedProbe of
                 true ->
-                    renew_timer(?PERSIST_TIMEOUT, persist_timer, State);
+                    renew_timer(?PERSIST_TIMEOUT, persist_timer, State2);
                 false ->
-                    renew_timer(?REXMIT_TIMEOUT, rexmit_timer, State)
+                    renew_timer(?REXMIT_TIMEOUT, rexmit_timer, State2)
             end,
-            State3 = State2#tcp_state{snd_nxt = calc_next_seq(Tcp, Data2)},
             tcp_output(State3);  % burst transmit
         _ ->
             case NeedProbe of
@@ -420,6 +397,28 @@ tcp_output(CanProbe,
                     State
             end
     end.
+
+build_and_send_packet(Syn, Data, Fin,
+                      #tcp_state{snd_nxt = SndNxt,
+                                 rcv_nxt = RcvNxt,
+                                 backend = Backend,
+                                 template = [Ether, Ip, TcpTmpl]} = State) ->
+    Psh = 0, % XXX
+    Tcp = TcpTmpl#tcp{
+        seqno = SndNxt,
+        ackno = RcvNxt,
+        syn = Syn,
+        fin = Fin,
+        ack = 1,
+        psh = Psh,
+        window = rcv_wnd(State),
+        options = <<>>
+    },
+    lager:debug("TCP send datalen ~p~n~s~n~s",
+                [byte_size(Data), pp(Tcp), pp(State)]),
+    Pkt = [Ether, Ip, Tcp, Data],
+    aloha_tcp:send_packet(Pkt, Backend),
+    State#tcp_state{snd_nxt = calc_next_seq(Tcp, Data)}.
 
 should_exit(#tcp_state{state = closed, owner = none}) ->
     true;
