@@ -22,21 +22,21 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
--module(aloha_ip).
+-module(aloha_ether).
 -export([handle/3]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
-handle(Pkt, Stack, Opts) ->
-    {Ip, Next, Rest} = aloha_packet:decode(ip, Pkt, Stack),
-    lager:debug("ip receive packet ~w ~w ~w~n", [Ip, Next, Rest]),
-    IpAddr = proplists:get_value(ip_addr, Opts),
-    handle_ip(Ip, Next, Rest, IpAddr, Stack).
+-define(BROADCAST, <<16#ffffffffffff:(6*8)>>).
 
-handle_ip(#ip{checksum = bad} = Ip, _Next, _Rest, _IpAddr, _Stack) ->
-    lager:info("IP bad checksum ~p", [Ip]);
-handle_ip(#ip{dst = IpAddr} = Ip, Next, Rest, IpAddr, Stack) ->
-    lager:debug("ip next ~w~n", [Next]),
-    aloha_nic:enqueue({Next, Rest, [Ip|Stack]});
-handle_ip(Ip, _Next, _Rest, _IpAddr, _Stack) ->
-    lager:info("not ours ~p", [Ip]).
+handle(Pkt, [], Opts) ->
+    {Ether, Next, Rest} = aloha_packet:decode(ether, Pkt, []),
+    OurAddr = proplists:get_value(addr, Opts),
+    handle_ether(Ether, Next, Rest, OurAddr).
+
+handle_ether(#ether{dst = ?BROADCAST} = Ether, Next, Rest, _OurAddr) ->
+    aloha_nic:enqueue({Next, Rest, [Ether]});
+handle_ether(#ether{dst = OurAddr} = Ether, Next, Rest, OurAddr) ->
+    aloha_nic:enqueue({Next, Rest, [Ether]});
+handle_ether(#ether{dst = Dst}, _Next, _Rest, _OurAddr) ->
+    lager:info("ether not ours ~w~n", [Dst]).

@@ -24,56 +24,37 @@
 
 -module(aloha_nic).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
-    code_change/3]).
--export([send_packet/1, send_packet/2, enqueue_cond/2]).
+         code_change/3]).
+-export([send_packet/1, send_packet/2, enqueue/1]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
 -behaviour(gen_server).
 
--record(state, {addr, prop, backend}).
+-record(state, {opts}).
 
 init(Opts) ->
-    Addr = proplists:get_value(addr, Opts),
-    Backend = proplists:get_value(backend, Opts),
-    {ok, #state{addr=Addr, prop=Opts, backend=Backend}}.
+    {ok, #state{opts=Opts}}.
 
 handle_call(_Req, _From, State) ->
     {noreply, State}.
 
-enqueue_cond(_Msg, false) ->
-    ok;
-enqueue_cond(Msg, true) ->
-    gen_server:cast(self(), Msg).
-
-handle_cast({packet, Pkt}, #state{addr=Addr}=State) ->
+handle_cast({packet, Pkt}, State) ->
     lager:debug("nic receive packet ~w~n", [Pkt]),
-    {Ether, Next, Rest} = aloha_packet:decode(ether, Pkt, []),
-    lager:debug("nic receive packet ~w ~w ~w~n", [Ether, Next, Rest]),
-    Dst = Ether#ether.dst,
-    BroadcastAddr = <<-1:(6*8)>>,
-    Ours = case Dst of
-        Addr -> true;
-        BroadcastAddr -> true;
-        _ ->
-            lager:info("not ours ~w~n", [Dst]),
-            false
-    end,
-    enqueue_cond({Next, Rest, [Ether]}, Ours),
+    aloha_ether:handle(Pkt, [], State#state.opts),
     {noreply, State};
 handle_cast({Type, Pkt, Stack}, State) ->
     Mod = ethertype_mod(Type),
     %lager:info("mod ~w pkt ~w opts ~w~n", [Mod, Pkt, State#state.prop]),
-    Mod:handle(Pkt, Stack, [{backend, State#state.backend} | State#state.prop]),
+    Mod:handle(Pkt, Stack, State#state.opts),
     {noreply, State};
-handle_cast({send_packet, BinPkt}, #state{backend=Backend} = State) ->
+handle_cast({send_packet, BinPkt}, #state{opts = Opts} = State) ->
+    Backend = proplists:get_value(backend, Opts),
     send_packet(BinPkt, Backend),
     {noreply, State};
-handle_cast({set_backend, Backend}, State) ->
-    {noreply, State#state{backend=Backend}};
-handle_cast({set_prop, Prop}, #state{prop=L}=State) ->
-    L2 = [Prop|L],
-    {noreply, State#state{prop=L2}};
+handle_cast({setopts, Opts}, #state{opts = L}=State) ->
+    L2 = aloha_utils:merge_opts(L, Opts),
+    {noreply, State#state{opts=L2}};
 handle_cast(M, State) ->
     lager:info("unknown msg ~w~n", [M]),
     {noreply, State}.
@@ -92,6 +73,9 @@ ethertype_mod(arp) -> aloha_arp;
 ethertype_mod(ip) -> aloha_ip;
 ethertype_mod(icmp) -> aloha_icmp;
 ethertype_mod(tcp) -> aloha_tcp.
+
+enqueue(Msg) ->
+    gen_server:cast(self(), Msg).
 
 send_packet(BinPkt) ->
     gen_server:cast(self(), {send_packet, BinPkt}).
