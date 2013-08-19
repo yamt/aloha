@@ -347,27 +347,27 @@ tcp_output(State) ->
 tcp_output(AckNow, State) ->
     tcp_output(false, AckNow, State).
 
+
+to_send(#tcp_state{state = closed}) ->
+    {0, <<>>, 0};
+to_send(#tcp_state{snd_una = Una, snd_nxt = Nxt, state = syn_received})
+        when Una =:= Nxt ->
+    {1, <<>>, 0};
+to_send(#tcp_state{state = syn_received}) ->
+    {0, <<>>, 0};
+to_send(#tcp_state{snd_una = Una, snd_nxt = Nxt, fin = Fin, snd_buf = Buf}) ->
+    {S, D, F, _} = aloha_tcp_seq:trim(0, Buf, Fin, Una, Nxt),
+    {S, D, F}.
+
 tcp_output(CanProbe,
            AckNow,
            #tcp_state{snd_una = SndUna,
                       snd_nxt = SndNxt,
-                     snd_wnd = SndWnd,
-                     rcv_nxt = RcvNxt,
-                     backend = Backend,
-                     template = [Ether, Ip, TcpTmpl],
-                     snd_buf = SndBuf} = State) ->
-    {Syn, Data, Fin} = case State#tcp_state.state of
-        closed ->
-            {0, <<>>, 0};
-        syn_received when SndUna =:= SndNxt ->
-            {1, <<>>, 0};
-        syn_received ->
-            {0, <<>>, 0};
-        _ ->
-            {S, D, F, _} = aloha_tcp_seq:trim(0, SndBuf, State#tcp_state.fin,
-                                              SndUna, SndNxt),
-            {S, D, F}
-    end,
+                      snd_wnd = SndWnd,
+                      rcv_nxt = RcvNxt,
+                      backend = Backend,
+                      template = [Ether, Ip, TcpTmpl]} = State) ->
+    {Syn, Data, Fin} = to_send(State),
     % probe if
     %   1. window is closed
     %   2. nothing in-flight
