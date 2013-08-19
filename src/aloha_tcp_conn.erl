@@ -347,7 +347,6 @@ tcp_output(State) ->
 tcp_output(AckNow, State) ->
     tcp_output(false, AckNow, State).
 
-
 to_send(#tcp_state{state = closed}) ->
     {0, <<>>, 0};
 to_send(#tcp_state{snd_una = Una, snd_nxt = Nxt, state = syn_received})
@@ -403,7 +402,7 @@ tcp_output(CanProbe,
                 Data2
             ],
             lager:debug("TCP send datalen ~p~n~s~n~s",
-                       [byte_size(Data2), pp(Tcp), pp(State)]),
+                        [byte_size(Data2), pp(Tcp), pp(State)]),
             aloha_tcp:send_packet(Pkt, Backend),
             State2 = case NeedProbe of
                 true ->
