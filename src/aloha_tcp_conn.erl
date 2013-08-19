@@ -196,7 +196,7 @@ code_change(_OldVsn, State, _Extra) ->
 trim(Tcp, Data, #tcp_state{rcv_nxt = undefined}) ->
     {Tcp, Data};
 trim(#tcp{syn = Syn, fin = Fin, seqno = Seq} = Tcp, Data,
-    #tcp_state{rcv_nxt = RcvNxt} = State) ->
+     #tcp_state{rcv_nxt = RcvNxt} = State) ->
     {Syn2, Data2, Fin2, Seq2} =
         aloha_tcp_seq:trim(Syn, Data, Fin, Seq,
                            RcvNxt, RcvNxt + rcv_wnd(State)),
