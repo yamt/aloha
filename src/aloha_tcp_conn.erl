@@ -37,7 +37,7 @@
 
 -record(tcp_state, {snd_una, snd_nxt, snd_wnd,
                     snd_buf, snd_buf_size,
-                    fin = 0, rexmit_timer,
+                    fin = 0, rexmit_timer, delack_timer,
                     rcv_nxt,
                     rcv_buf, rcv_buf_size,
                     backend, template,
@@ -48,6 +48,7 @@
 
 -define(REXMIT_TIMEOUT, 1000).
 -define(PERSIST_TIMEOUT, 3000).
+-define(DELACK_TIMEOUT, 500).
 
 pp(#tcp_state{snd_buf = SndBuf} = State) when is_binary(SndBuf) ->
     % XXX hack to make this less verbose
@@ -181,6 +182,10 @@ handle_info({timeout, TRef, Name},
     State2 = State#tcp_state{snd_nxt = Una},
     State3 = tcp_output(true, false, State2),
     noreply(State3);
+handle_info({timeout, TRef, delack_timeout},
+            #tcp_state{delack_timer = TRef} = State) ->
+    State2 = tcp_output(true, State),
+    noreply(State2);
 handle_info(Info, State) ->
     lager:info("handle_info: ~w", [Info]),
     noreply(State).
@@ -293,6 +298,19 @@ process_input(#tcp{} = Tcp, Data, State) ->
             {true, State}
     end.
 
+setup_ack(_Nxt, #tcp_state{delack_timer = undefined} = State) ->
+    TRef = erlang:start_timer(?DELACK_TIMEOUT, self(), delack_timeout),
+    State2 = State#tcp_state{delack_timer = TRef},
+    {false, State2};
+setup_ack(_Nxt, State) ->
+    {true, cancel_delack(State)}.
+
+cancel_delack(#tcp_state{delack_timer = undefined} = State) ->
+    State;
+cancel_delack(#tcp_state{delack_timer = TRef} = State) ->
+    erlang:cancel_timer(TRef),
+    State#tcp_state{delack_timer = undefined}.
+
 update_receiver(#tcp{syn = 1, seqno = Seq}, <<>>,
                 #tcp_state{rcv_nxt = undefined,
                            state = syn_received} = State) ->
@@ -301,9 +319,9 @@ update_receiver(#tcp{seqno = Seq} = Tcp, Data,
                 #tcp_state{rcv_nxt = Seq} = State) ->
     RcvBuf = <<(State#tcp_state.rcv_buf)/bytes, Data/bytes>>,
     Nxt = calc_next_seq(Tcp, Data),
-    AckNow = State#tcp_state.rcv_nxt =/= Nxt,
-    State2 = State#tcp_state{rcv_nxt = Nxt, rcv_buf = RcvBuf},
-    {AckNow, State2};
+    {AckNow, State2} = setup_ack(Nxt, State),
+    State3 = State2#tcp_state{rcv_nxt = Nxt, rcv_buf = RcvBuf},
+    {AckNow, State3};
 update_receiver(_, _, State) ->
     % drop out of order segment
     {true, State}.
@@ -381,14 +399,15 @@ tcp_output(CanProbe,
         aloha_tcp_seq:trim(Syn, Data, Fin, SndNxt, SndNxt, SndNxt + SndWnd2),
     case AckNow orelse Syn2 =:= 1 orelse Fin2 =:= 1 orelse Data2 =/= <<>> of
         true ->
-            State2 = build_and_send_packet(Syn2, Data2, Fin2, State),
-            State3 = case NeedProbe of
+            State2 = cancel_delack(State),
+            State3 = build_and_send_packet(Syn2, Data2, Fin2, State2),
+            State4 = case NeedProbe of
                 true ->
-                    renew_timer(?PERSIST_TIMEOUT, persist_timer, State2);
+                    renew_timer(?PERSIST_TIMEOUT, persist_timer, State3);
                 false ->
-                    renew_timer(?REXMIT_TIMEOUT, rexmit_timer, State2)
+                    renew_timer(?REXMIT_TIMEOUT, rexmit_timer, State3)
             end,
-            tcp_output(State3);  % burst transmit
+            tcp_output(State4);  % burst transmit
         _ ->
             case NeedProbe of
                 true ->
