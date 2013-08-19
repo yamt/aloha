@@ -35,12 +35,15 @@
 
 -behaviour(gen_server).
 
--record(tcp_state, {snd_una, snd_nxt, snd_wnd, rcv_nxt, backend, template,
-                    rexmit_timer,
+-record(tcp_state, {snd_una, snd_nxt, snd_wnd,
                     snd_buf, snd_buf_size,
+                    fin = 0, rexmit_timer,
+                    rcv_nxt,
                     rcv_buf, rcv_buf_size,
+                    backend, template,
                     state, owner, active = false, suppress = false,
-                    pending_ctl = [], fin = 0, key,
+                    pending_ctl = [],
+                    key,
                     writers = [], reader = none}).
 
 -define(REXMIT_TIMEOUT, 1000).
@@ -241,6 +244,7 @@ set_state(New, State) ->
     State3 = process_readers(State2),
     process_writers(State3).
 
+% incoming ack
 update_state_on_ack(true, _, #tcp_state{state = syn_received} = State) ->
     established(State);
 update_state_on_ack(true, _, #tcp_state{state = syn_sent} = State) ->
@@ -254,9 +258,11 @@ update_state_on_ack(_, true, #tcp_state{state = last_ack} = State) ->
 update_state_on_ack(_, _, State) ->
     State.
 
+% user close
 update_state_on_close(State) ->
     set_state(next_state_on_close(State#tcp_state.state), State).
 
+% incoming rst/syn/fin
 update_state_on_flags(#tcp{rst = 1}, #tcp_state{} = State) ->
     lager:debug("closed on rst"),
     set_state(closed, State);
