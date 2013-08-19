@@ -64,7 +64,7 @@ pp(_, _) ->
 init(Opts) ->
     Backend = proplists:get_value(backend, Opts),
     Key = proplists:get_value(key, Opts),
-    % XXX link
+    Owner = proplists:get_value(owner, Opts),
     State = #tcp_state{backend = Backend,
                        template = proplists:get_value(template, Opts),
                        snd_nxt = 0,  % ISS
@@ -73,9 +73,10 @@ init(Opts) ->
                        snd_buf = <<>>, snd_buf_size = 3000,
                        rcv_buf = <<>>, rcv_buf_size = 3000,
                        state = closed,
-                       owner = proplists:get_value(owner, Opts),
+                       owner = Owner,
                        key = Key},
     true = ets:insert_new(aloha_tcp_conn, {Key, self()}),
+    link(Owner),
     lager:debug("init ~s", [pp(State)]),
     {ok, State}.
 
@@ -123,10 +124,12 @@ handle_call(peername, _From, #tcp_state{template = Tmpl} = State) ->
 handle_call(sockname, _From, #tcp_state{template = Tmpl} = State) ->
     [_, #ip{src = Addr}, #tcp{src_port = Port}] = Tmpl,
     reply({ok, {aloha_utils:bytes_to_ip(Addr), Port}}, State);
-handle_call({controlling_process, Pid}, _From, State) ->
+handle_call({controlling_process, NewOwner}, _From,
+            #tcp_state{owner = OldOwner} = State) ->
     true = State#tcp_state.suppress,  % assert.  see controlling_process/1
-    State2 = State#tcp_state{owner = Pid},
-    % XXX unlink/link here?
+    State2 = State#tcp_state{owner = NewOwner},
+    unlink(OldOwner),
+    link(NewOwner),
     reply(ok, State2);
 handle_call(close, {Pid, _}, #tcp_state{owner = Pid} = State) ->
     lager:info("user close ~p", [self()]),
