@@ -398,19 +398,24 @@ tcp_output(CanProbe,
             end
     end.
 
+push(_, _, 1, _) -> 1;
+push(1, _, _, _) -> 1;
+push(_, Data, _, #tcp_state{snd_una = Una, snd_nxt = Nxt, snd_buf = Buf})
+    when ?SEQ(Nxt - Una) + byte_size(Data) =:= byte_size(Buf) -> 1;
+push(_, _, _, _) -> 0.
+
 build_and_send_packet(Syn, Data, Fin,
                       #tcp_state{snd_nxt = SndNxt,
                                  rcv_nxt = RcvNxt,
                                  backend = Backend,
                                  template = [Ether, Ip, TcpTmpl]} = State) ->
-    Psh = 0, % XXX
     Tcp = TcpTmpl#tcp{
         seqno = SndNxt,
         ackno = RcvNxt,
         syn = Syn,
         fin = Fin,
         ack = 1,
-        psh = Psh,
+        psh = push(Syn, Data, Fin, State),
         window = rcv_wnd(State),
         options = <<>>
     },
