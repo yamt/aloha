@@ -32,5 +32,6 @@ bytes_to_ip(Bin) when byte_size(Bin) =:= 4 ->
 bytes_to_ipv4(<<A, B, C, D>>) ->
     {A, B, C, D}.
 
+% normalize Opts1++Opts2
 merge_opts(Opts1, Opts2) ->
     proplists:compact(lists:ukeysort(1, proplists:unfold(Opts1 ++ Opts2))).
