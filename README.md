@@ -29,7 +29,6 @@ TODO
 - active open
 - exit_on_close
 - urg
-- delayed ack
 - sws avoidance
 - 2msl
 - mss option
