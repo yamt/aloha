@@ -178,7 +178,7 @@ handle_info({timeout, TRef, reader_timeout},
     noreply(State#tcp_state{rcv_buf = RcvBuf2, reader = none});
 handle_info({timeout, TRef, Name},
             #tcp_state{snd_una = Una, rexmit_timer = TRef} = State) ->
-    lager:info("timer expired ~p", [Name]),
+    lager:debug("timer expired ~p", [Name]),
     State2 = State#tcp_state{snd_nxt = Una},
     State3 = tcp_output(true, false, State2),
     noreply(State3);
