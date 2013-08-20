@@ -57,11 +57,9 @@ listener_port_key({_SrcIp, _DstIp, _SrcPort, DstPort}) ->
     DstPort.
 
 lookup_listener(Key) ->
-    try ets:lookup_element(aloha_tcp_listener, listener_key(Key), 2)
-    catch
-        error:badarg ->
-            ets:lookup_element(aloha_tcp_listener, listener_port_key(Key), 2)
-    end.
+    Spec = [{{listener_key(Key),     '$1'}, [], ['$1']},
+            {{listener_port_key(Key),'$1'}, [], ['$1']}],
+    ets:select(aloha_tcp_listener, Spec).
 
 make_reply_template(Tcp, Stack) ->
     [Ip, Ether] = Stack,
@@ -73,11 +71,10 @@ make_reply_template(Tcp, Stack) ->
 new_connection(#tcp{syn = 0}, _, _, _) ->
     none;
 new_connection(Tcp, Stack, Key, Opts) ->
-    try
-        Listener = lookup_listener(Key),
-        new_connection(Tcp, Stack, Key, Opts, Listener)
-    catch
-        error:badarg ->
+    case lookup_listener(Key) of
+        [Listener] ->
+            new_connection(Tcp, Stack, Key, Opts, Listener);
+        [] ->
             lager:info("no listener for ~p", [Key]),
             none
     end.
