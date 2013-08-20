@@ -79,7 +79,7 @@ init(Opts) ->
                        state = closed,
                        owner = Owner,
                        key = Key},
-    true = ets:insert_new(aloha_tcp_conn, {Key, self()}),
+    true = ets:insert_new(?MODULE, {Key, self()}),
     link(Owner),
     lager:debug("init ~s", [pp(State)]),
     {ok, State}.
@@ -194,7 +194,7 @@ handle_info(Info, State) ->
 
 terminate(Reason, #tcp_state{key = Key} = State) ->
     lager:debug("conn process terminate ~p~n~s", [Reason, pp(State)]),
-    true = ets:delete(aloha_tcp_conn, Key),
+    true = ets:delete(?MODULE, Key),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->

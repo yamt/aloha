@@ -35,10 +35,10 @@
 -record(listen_state, {accept_q = [], waiters = [], key, opts}).
 
 start_link(Key, Opts) ->
-    gen_server:start_link(aloha_tcp_listener, {Key, Opts}, []).
+    gen_server:start_link(?MODULE, {Key, Opts}, []).
 
 init({Key, Opts}) ->
-    true = ets:insert_new(aloha_tcp_listener, {Key, self()}),
+    true = ets:insert_new(?MODULE, {Key, self()}),
     DefOpts = [{active, true}],
     Opts2 = lists:keydelete(reuseaddr, 1, Opts),
     Opts3 = lists:keydelete(port, 1, Opts2),
@@ -71,7 +71,7 @@ handle_info(Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, #listen_state{key = Key}) ->
-    true = ets:delete(aloha_tcp_listener, Key),
+    true = ets:delete(?MODULE, Key),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
