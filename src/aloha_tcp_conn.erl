@@ -136,7 +136,7 @@ handle_call({controlling_process, NewOwner}, _From,
     link(NewOwner),
     reply(ok, State2);
 handle_call(close, {Pid, _}, #tcp_state{owner = Pid} = State) ->
-    lager:info("user close ~p", [self()]),
+    lager:info("TCP user close ~p", [self()]),
     State2 = State#tcp_state{owner = none},
     reply(ok, State2);
 handle_call({setopts, Opts}, _From, State) ->
@@ -160,9 +160,11 @@ handle_call(get_owner_info, _From,
 handle_cast({#tcp{}, _} = Msg, State) ->
     segment_arrival(Msg, State);
 handle_cast({shutdown, read}, State) ->
+    lager:info("TCP user shutdown read ~p", [self()]),
     State2 = shutdown_receiver(State),
     noreply(State2);
 handle_cast({shutdown, write}, State) ->
+    lager:info("TCP user shutdown write ~p", [self()]),
     State2 = shutdown_sender(State),
     noreply(State2);
 handle_cast(M, State) ->
