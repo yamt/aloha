@@ -34,6 +34,8 @@
 -record(state, {opts}).
 
 init(Opts) ->
+    Key = proplists:get_value(key, Opts),
+    true = ets:insert_new(?MODULE, {Key, self()}),
     {ok, #state{opts=Opts}}.
 
 handle_call(_Req, _From, State) ->
@@ -63,7 +65,9 @@ handle_info(Info, State) ->
     lager:info("handle_info: ~w~n", [Info]),
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{opts = Opts}) ->
+    Key = proplists:get_value(key, Opts),
+    true = ets:delete(?MODULE, Key),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
