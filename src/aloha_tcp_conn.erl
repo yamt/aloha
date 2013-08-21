@@ -634,9 +634,9 @@ setup_reader_timeout(Timeout) ->
 
 shutdown_receiver(State) ->
     % just close the receive window.
-    % XXX this shrink the window and it makes us refuse accepting fin.
-    % implementing rcv_adv would mask the problem in the common cases.
-    % (i think it's what linux does.)
+    % XXX keeping window closed makes us refuse accepting fin.
+    % rcv_adv masks the problem in the common cases, though.
+    % (it's what linux does.)
     State2 = State#tcp_state{rcv_buf = <<>>, rcv_buf_size = 0},
     tcp_output(State2).
 
