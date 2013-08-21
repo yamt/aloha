@@ -281,6 +281,10 @@ update_state_on_flags(#tcp{syn = 0, fin = 1},
                       #tcp_state{state = established} = State) ->
     State2 = set_state(close_wait, State),
     deliver_to_app({tcp_closed, self_socket()}, State2);
+update_state_on_flags(#tcp{syn = 0, fin = 1},
+                      #tcp_state{state = fin_wait_2} = State) ->
+    State2 = set_state(time_wait, State),
+    deliver_to_app({tcp_closed, self_socket()}, State2);
 update_state_on_flags(_, State) ->
     State.
 
