@@ -318,6 +318,8 @@ process_input(#tcp{} = Tcp, Data, State) ->
             {true, State}
     end.
 
+setup_ack(Nxt, #tcp_state{rcv_nxt = Nxt} = State) ->
+    {false, State};
 setup_ack(_Nxt, #tcp_state{delack_timer = undefined} = State) ->
     TRef = erlang:start_timer(?DELACK_TIMEOUT, self(), delack_timeout),
     State2 = State#tcp_state{delack_timer = TRef},
