@@ -183,18 +183,18 @@ handle_info({timeout, TRef, reader_timeout},
     noreply(State#tcp_state{rcv_buf = RcvBuf2, reader = none});
 handle_info({timeout, TRef, time_wait_timer},
             #tcp_state{rexmit_timer = TRef, state = time_wait} = State) ->
-    lager:info("2msl timer expired"),
+    lager:debug("2msl timer expired"),
     State2 = set_state(closed, State),
     noreply(State2);
 handle_info({timeout, TRef, Name},
             #tcp_state{snd_una = Una, rexmit_timer = TRef} = State) ->
-    lager:info("~p expired", [Name]),
+    lager:debug("~p expired", [Name]),
     State2 = State#tcp_state{snd_nxt = Una},
     State3 = tcp_output(true, false, State2),
     noreply(State3);
 handle_info({timeout, TRef, delack_timeout},
             #tcp_state{delack_timer = TRef} = State) ->
-    lager:info("delack timer expired"),
+    lager:debug("delack timer expired"),
     State2 = tcp_output(true, State),
     noreply(State2);
 handle_info(Info, State) ->
@@ -430,7 +430,7 @@ tcp_output(CanProbe,
     end.
 
 renew_timer(Timeout, Msg, State) ->
-    lager:info("renew timer ~p", [Msg]),
+    lager:debug("renew timer ~p", [Msg]),
     erlang:cancel_timer(State#tcp_state.rexmit_timer),
     TRef = erlang:start_timer(Timeout, self(), Msg),
     State#tcp_state{rexmit_timer = TRef}.
