@@ -247,6 +247,7 @@ established(#tcp_state{owner = Owner} = State) ->
     set_state(established, State).
 
 set_state(New, State) ->
+    lager:info("TCP ~p State ~p -> ~p", [self(), State#tcp_state.state, New]),
     State2 = State#tcp_state{state = New},
     State3 = process_readers(State2),
     process_writers(State3).
