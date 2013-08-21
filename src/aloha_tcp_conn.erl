@@ -38,7 +38,7 @@
 -record(tcp_state, {snd_una, snd_nxt, snd_wnd,
                     snd_buf, snd_buf_size,
                     fin = 0, rexmit_timer, delack_timer,
-                    rcv_nxt,
+                    rcv_nxt, rcv_adv,
                     rcv_buf, rcv_buf_size,
                     backend, template,
                     state, owner, active = false, suppress = false,
@@ -353,8 +353,13 @@ enqueue_fin(closed, State) ->
 enqueue_fin(_, State) ->
     State#tcp_state{fin = 1}.
 
-rcv_wnd(#tcp_state{rcv_buf_size = RcvBufSize, rcv_buf = RcvBuf}) ->
-    max(0, RcvBufSize - byte_size(RcvBuf)).
+rcv_buf_space(#tcp_state{rcv_buf_size = BufSize, rcv_buf = Buf}) ->
+    max(0, BufSize - byte_size(Buf)).
+
+rcv_wnd(#tcp_state{rcv_adv = undefined} = Tcp) ->
+    rcv_buf_space(Tcp);
+rcv_wnd(#tcp_state{rcv_nxt = Nxt, rcv_adv = Adv} = Tcp) ->
+    max(rcv_buf_space(Tcp), Adv - Nxt).
 
 renew_timer(Timeout, Msg, State) ->
     erlang:cancel_timer(State#tcp_state.rexmit_timer),
@@ -430,6 +435,7 @@ build_and_send_packet(Syn, Data, Fin,
                                  rcv_nxt = RcvNxt,
                                  backend = Backend,
                                  template = [Ether, Ip, TcpTmpl]} = State) ->
+    Win = rcv_wnd(State),
     Tcp = TcpTmpl#tcp{
         seqno = SndNxt,
         ackno = RcvNxt,
@@ -437,14 +443,15 @@ build_and_send_packet(Syn, Data, Fin,
         fin = Fin,
         ack = 1,
         psh = push(Syn, Data, Fin, State),
-        window = rcv_wnd(State),
+        window = Win,
         options = <<>>
     },
     lager:debug("TCP send datalen ~p~n~s~n~s",
                 [byte_size(Data), pp(Tcp), pp(State)]),
     Pkt = [Ether, Ip, Tcp, Data],
     aloha_tcp:send_packet(Pkt, Backend),
-    State#tcp_state{snd_nxt = calc_next_seq(Tcp, Data)}.
+    State#tcp_state{snd_nxt = calc_next_seq(Tcp, Data),
+                    rcv_adv = RcvNxt + Win}.
 
 should_exit(#tcp_state{state = closed, owner = none}) ->
     true;
