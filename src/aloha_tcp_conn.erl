@@ -46,9 +46,12 @@
                     key,
                     writers = [], reader = none}).
 
+-define(MSL, (30 * 1000)).
+
 -define(REXMIT_TIMEOUT, 1000).
 -define(PERSIST_TIMEOUT, 3000).
 -define(DELACK_TIMEOUT, 500).
+-define(TIME_WAIT_TIMEOUT, (2 * ?MSL)).
 
 pp(#tcp_state{snd_buf = SndBuf} = State) when is_binary(SndBuf) ->
     % XXX hack to make this less verbose
@@ -178,14 +181,20 @@ handle_info({timeout, TRef, reader_timeout},
     % XXX XXX this shrinks window advertised to the peer
     RcvBuf2 = <<Data/bytes, RcvBuf/bytes>>,
     noreply(State#tcp_state{rcv_buf = RcvBuf2, reader = none});
+handle_info({timeout, TRef, time_wait_timer},
+            #tcp_state{rexmit_timer = TRef, state = time_wait} = State) ->
+    lager:info("2msl timer expired"),
+    State2 = set_state(closed, State),
+    noreply(State2);
 handle_info({timeout, TRef, Name},
             #tcp_state{snd_una = Una, rexmit_timer = TRef} = State) ->
-    lager:debug("timer expired ~p", [Name]),
+    lager:info("~p expired", [Name]),
     State2 = State#tcp_state{snd_nxt = Una},
     State3 = tcp_output(true, false, State2),
     noreply(State3);
 handle_info({timeout, TRef, delack_timeout},
             #tcp_state{delack_timer = TRef} = State) ->
+    lager:info("delack timer expired"),
     State2 = tcp_output(true, State),
     noreply(State2);
 handle_info(Info, State) ->
@@ -370,11 +379,6 @@ rcv_wnd(#tcp_state{rcv_adv = undefined} = Tcp) ->
 rcv_wnd(#tcp_state{rcv_nxt = Nxt, rcv_adv = Adv} = Tcp) ->
     max(rcv_buf_space(Tcp), Adv - Nxt).
 
-renew_timer(Timeout, Msg, State) ->
-    erlang:cancel_timer(State#tcp_state.rexmit_timer),
-    TRef = erlang:start_timer(Timeout, self(), Msg),
-    State#tcp_state{rexmit_timer = TRef}.
-
 tcp_output(State) ->
     tcp_output(false, State).
 
@@ -417,21 +421,31 @@ tcp_output(CanProbe,
         true ->
             State2 = cancel_delack(State),
             State3 = build_and_send_packet(Syn2, Data2, Fin2, State2),
-            State4 = case NeedProbe of
-                true ->
-                    renew_timer(?PERSIST_TIMEOUT, persist_timer, State3);
-                false ->
-                    renew_timer(?REXMIT_TIMEOUT, rexmit_timer, State3)
-            end,
+            State4 = might_renew_timer(true, NeedProbe, State3),
             tcp_output(State4);  % burst transmit
         _ ->
-            case NeedProbe of
-                true ->
-                    renew_timer(?PERSIST_TIMEOUT, persist_timer, State);
-                false ->
-                    State
-            end
+            might_renew_timer(false, NeedProbe, State)
     end.
+
+renew_timer(Timeout, Msg, State) ->
+    lager:info("renew timer ~p", [Msg]),
+    erlang:cancel_timer(State#tcp_state.rexmit_timer),
+    TRef = erlang:start_timer(Timeout, self(), Msg),
+    State#tcp_state{rexmit_timer = TRef}.
+
+might_renew_timer(false, false, State) ->
+    State;
+might_renew_timer(true, NeedProbe, State) ->
+    {Timeout, Msg} = choose_timer(NeedProbe, State#tcp_state.state),
+    renew_timer(Timeout, Msg, State).
+
+choose_timer(_, time_wait) ->
+    % we have sent ack of fin.
+    {?TIME_WAIT_TIMEOUT, time_wait_timer};
+choose_timer(true, _) ->
+    {?PERSIST_TIMEOUT, persist_timer};
+choose_timer(false, _) ->
+    {?REXMIT_TIMEOUT, rexmit_timer}.
 
 push(_, _, 1, _) -> 1;
 push(1, _, _, _) -> 1;
