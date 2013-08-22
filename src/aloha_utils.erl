@@ -26,6 +26,7 @@
 -export([bytes_to_ip/1]).
 -export([merge_opts/2]).
 -export([pr/2]).
+-export([bin_not/1, bin_and/2, bin_or/2]).
 
 bytes_to_ip(Bin) when byte_size(Bin) =:= 4 ->
     bytes_to_ipv4(Bin).
@@ -48,3 +49,22 @@ recur_apply(F, V) when is_tuple(V) andalso is_atom(element(1, V)) ->
     F(list_to_tuple([H|recur_apply(F, T)]));
 recur_apply(F, V) ->
     F(V).
+
+bin_not(Bin) ->
+    Size = byte_size(Bin),
+    <<Int:Size/unit:8>> = Bin,
+    <<(bnot Int):Size/unit:8>>.
+
+bin_and(Bin1, Bin2) ->
+    Size = byte_size(Bin1),
+    Size = byte_size(Bin2),
+    <<Int1:Size/unit:8>> = Bin1,
+    <<Int2:Size/unit:8>> = Bin2,
+    <<(Int1 band Int2):Size/unit:8>>.
+
+bin_or(Bin1, Bin2) ->
+    Size = byte_size(Bin1),
+    Size = byte_size(Bin2),
+    <<Int1:Size/unit:8>> = Bin1,
+    <<Int2:Size/unit:8>> = Bin2,
+    <<(Int1 bor Int2):Size/unit:8>>.
