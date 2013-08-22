@@ -22,24 +22,27 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
--module(aloha_ether).
+-module(aloha_icmpv6).
 -export([handle/3]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
--define(BROADCAST, <<16#ffffffffffff:(6*8)>>).
+handle(Pkt, Stack, Opts) ->
+    {Icmp, _Next, <<>>} = aloha_packet:decode(icmpv6, Pkt, Stack),
+    handle_icmpv6(Icmp, Stack, Opts).
 
-handle(Pkt, [], Opts) ->
-    {Ether, Next, Rest} = aloha_packet:decode(ether, Pkt, []),
-    OurAddr = proplists:get_value(addr, Opts),
-    handle_ether(Ether, Next, Rest, OurAddr).
-
-handle_ether(#ether{dst = ?BROADCAST} = Ether, Next, Rest, _OurAddr) ->
-    aloha_nic:enqueue({Next, Rest, [Ether]});
-handle_ether(#ether{dst = <<16#33, 16#33, _/bytes>>} = Ether, Next, Rest, _) ->
-    % ipv6 multicast (RFC 2464 7.)
-    aloha_nic:enqueue({Next, Rest, [Ether]});
-handle_ether(#ether{dst = OurAddr} = Ether, Next, Rest, OurAddr) ->
-    aloha_nic:enqueue({Next, Rest, [Ether]});
-handle_ether(#ether{dst = Dst}, _Next, _Rest, _OurAddr) ->
-    lager:info("ether not ours ~w~n", [Dst]).
+handle_icmpv6(#icmpv6{checksum = bad} = Icmp, _Stack, _Opts) ->
+    lager:info("ICMP bad checksum ~p", [Icmp]);
+handle_icmpv6(#icmpv6{type = echo_request} = Icmp, Stack, Opts) ->
+    [Ip, Ether] = Stack,
+    Addr = proplists:get_value(addr, Opts),
+    IpAddr = proplists:get_value(ipv6_addr, Opts),
+    Rep = [Ether#ether{dst = Ether#ether.src, src = Addr},
+           Ip#ip{src = IpAddr, dst = Ip#ip.src},
+           Icmp#icmpv6{type = echo_reply}],
+    lager:info("icmpv6 ~p", [aloha_utils:pr(Rep, ?MODULE)]),
+    BinPkt = aloha_packet:encode_packet(Rep),
+    aloha_nic:send_packet(BinPkt);
+handle_icmpv6(Icmp, _Stack, _Opts) ->
+    lager:info("icmpv6 unhandled ~p", [aloha_utils:pr(Icmp, ?MODULE)]),
+    ok.

@@ -22,24 +22,26 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
--module(aloha_ether).
+-module(aloha_ipv6).
 -export([handle/3]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
--define(BROADCAST, <<16#ffffffffffff:(6*8)>>).
+handle(Pkt, Stack, Opts) ->
+    {Ip, Next, Rest} = aloha_packet:decode(ipv6, Pkt, Stack),
+    lager:debug("ipv6 receive packet ~w ~w ~w~n", [Ip, Next, Rest]),
+    IpAddr = proplists:get_value(ipv6_addr, Opts, none),
+    Mcast = solicited_node_multicast(IpAddr),
+    handle_ipv6(Ip, Next, Rest, IpAddr, Mcast, Stack).
 
-handle(Pkt, [], Opts) ->
-    {Ether, Next, Rest} = aloha_packet:decode(ether, Pkt, []),
-    OurAddr = proplists:get_value(addr, Opts),
-    handle_ether(Ether, Next, Rest, OurAddr).
+handle_ipv6(#ipv6{dst = IpAddr} = Ip, Next, Rest, IpAddr, _Mcast, Stack) ->
+    aloha_nic:enqueue({Next, Rest, [Ip|Stack]});
+handle_ipv6(#ipv6{dst = Mcast} = Ip, Next, Rest, _IpAddr, Mcast, Stack) ->
+    aloha_nic:enqueue({Next, Rest, [Ip|Stack]});
+handle_ipv6(Ip, _Next, _Rest, _IpAddr, _Mcast, _Stack) ->
+    lager:info("not ours ~p", [aloha_utils:pr(Ip, ?MODULE)]).
 
-handle_ether(#ether{dst = ?BROADCAST} = Ether, Next, Rest, _OurAddr) ->
-    aloha_nic:enqueue({Next, Rest, [Ether]});
-handle_ether(#ether{dst = <<16#33, 16#33, _/bytes>>} = Ether, Next, Rest, _) ->
-    % ipv6 multicast (RFC 2464 7.)
-    aloha_nic:enqueue({Next, Rest, [Ether]});
-handle_ether(#ether{dst = OurAddr} = Ether, Next, Rest, OurAddr) ->
-    aloha_nic:enqueue({Next, Rest, [Ether]});
-handle_ether(#ether{dst = Dst}, _Next, _Rest, _OurAddr) ->
-    lager:info("ether not ours ~w~n", [Dst]).
+% compute solicited-node multicast address (RFC 2323)
+solicited_node_multicast(Addr) ->
+    <<_:104, Tail:24>> = Addr,
+    <<16#ff02:16, 0:16, 0:16, 0:16, 0:16, 1:16, 16#ff:8, Tail:24>>.

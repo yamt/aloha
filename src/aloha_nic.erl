@@ -75,7 +75,9 @@ code_change(_OldVsn, State, _Extra) ->
 
 ethertype_mod(arp) -> aloha_arp;
 ethertype_mod(ip) -> aloha_ip;
+ethertype_mod(ipv6) -> aloha_ipv6;
 ethertype_mod(icmp) -> aloha_icmp;
+ethertype_mod(icmpv6) -> aloha_icmpv6;
 ethertype_mod(tcp) -> aloha_tcp.
 
 enqueue(Msg) ->
