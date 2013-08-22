@@ -25,6 +25,7 @@
 -module(aloha_utils).
 -export([bytes_to_ip/1]).
 -export([merge_opts/2]).
+-export([pr/2]).
 
 bytes_to_ip(Bin) when byte_size(Bin) =:= 4 ->
     bytes_to_ipv4(Bin).
@@ -35,3 +36,15 @@ bytes_to_ipv4(<<A, B, C, D>>) ->
 % normalize Opts1++Opts2
 merge_opts(Opts1, Opts2) ->
     proplists:compact(lists:ukeysort(1, proplists:unfold(Opts1 ++ Opts2))).
+
+% lager:pr/2 wrapper to pretty print records recursively
+pr(V, Mod) ->
+    recur_apply(fun(X) -> lager:pr(X, Mod) end, V).
+
+recur_apply(F, V) when is_list(V) ->
+    lists:map(fun(X) -> recur_apply(F, X) end, V);
+recur_apply(F, V) when is_tuple(V) andalso is_atom(element(1, V)) ->
+    [H|T] = tuple_to_list(V),
+    F(list_to_tuple([H|recur_apply(F, T)]));
+recur_apply(F, V) ->
+    F(V).
