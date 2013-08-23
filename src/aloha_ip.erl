@@ -29,7 +29,6 @@
 
 handle(Pkt, Stack, Opts) ->
     {Ip, Next, Rest} = aloha_packet:decode(ip, Pkt, Stack),
-    lager:debug("ip receive packet ~w ~w ~w~n", [Ip, Next, Rest]),
     IpAddr = proplists:get_value(ip_addr, Opts),
     Mask = proplists:get_value(ip_mask, Opts, <<255,255,255,0>>),
     Bcast = aloha_utils:bin_or(IpAddr, aloha_utils:bin_not(Mask)),
@@ -38,10 +37,8 @@ handle(Pkt, Stack, Opts) ->
 handle_ip(#ip{checksum = bad} = Ip, _Next, _Rest, _IpAddr, _Bcast, _Stack) ->
     lager:info("IP bad checksum ~p", [Ip]);
 handle_ip(#ip{dst = IpAddr} = Ip, Next, Rest, IpAddr, _Bcast, Stack) ->
-    lager:debug("ip next ~w~n", [Next]),
     aloha_nic:enqueue({Next, Rest, [Ip|Stack]});
 handle_ip(#ip{dst = Bcast} = Ip, Next, Rest, _IpAddr, Bcast, Stack) ->
-    lager:debug("ip next ~w~n", [Next]),
     aloha_nic:enqueue({Next, Rest, [Ip|Stack]});
 handle_ip(Ip, _Next, _Rest, _IpAddr, _Bcast, _Stack) ->
     lager:info("not ours ~p", [aloha_utils:pr(Ip, ?MODULE)]).

@@ -29,7 +29,6 @@
 
 handle(Pkt, Stack, Opts) ->
     {Ip, Next, Rest} = aloha_packet:decode(ipv6, Pkt, Stack),
-    lager:debug("ipv6 receive packet ~w ~w ~w~n", [Ip, Next, Rest]),
     IpAddr = proplists:get_value(ipv6_addr, Opts, none),
     Mcast = solicited_node_multicast(IpAddr),
     handle_ipv6(Ip, Next, Rest, IpAddr, Mcast, Stack).

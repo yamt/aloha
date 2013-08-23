@@ -42,12 +42,10 @@ handle_call(_Req, _From, State) ->
     {noreply, State}.
 
 handle_cast({packet, Pkt}, State) ->
-    lager:debug("nic receive packet ~w~n", [Pkt]),
     aloha_ether:handle(Pkt, [], State#state.opts),
     {noreply, State};
 handle_cast({Type, Pkt, Stack}, State) ->
     Mod = ethertype_mod(Type),
-    %lager:info("mod ~w pkt ~w opts ~w~n", [Mod, Pkt, State#state.prop]),
     Mod:handle(Pkt, Stack, State#state.opts),
     {noreply, State};
 handle_cast({send_packet, BinPkt}, #state{opts = Opts} = State) ->
