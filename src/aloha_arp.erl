@@ -41,7 +41,6 @@ handle_arp(#arp{op = request} = Arp, Addr) ->
     Rep = [#ether{dst=SourceHWAddr, src=Addr, type=arp},
            Arp#arp{op = reply, tpa = SourceIP, tha=SourceHWAddr,
                    spa = TargetIP, sha = Addr}],
-    BinPkt = aloha_packet:encode_packet(Rep),
-    aloha_nic:send_packet(BinPkt);
+    aloha_nic:send_packet(Rep);
 handle_arp(#arp{}, _Addr) ->
     ok.

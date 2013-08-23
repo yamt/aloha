@@ -122,10 +122,9 @@ reply_rst(Tcp, Stack, Data, Backend) ->
 send_packet(Pkt, Backend) ->
     [_, _, Tcp, Data] = Pkt,
     lager:info("SEND ~s", [tcp_summary(Tcp, Data)]),
-    BinPkt = aloha_packet:encode_packet(Pkt),
-%   [aloha_nic:send_packet(BinPkt, Backend) ||
+%   [aloha_nic:send_packet(Pkt, Backend) ||
 %    random:uniform() > 0.5],  % drop packets for testing
-    aloha_nic:send_packet(BinPkt, Backend).
+    aloha_nic:send_packet(Pkt, Backend).
 
 flag(1, C) ->
     C;

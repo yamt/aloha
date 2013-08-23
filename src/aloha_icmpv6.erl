@@ -40,8 +40,7 @@ handle_icmpv6(#icmpv6{type = echo_request} = Icmp, Stack, Opts) ->
     Rep = [Ether#ether{dst = Ether#ether.src, src = Addr},
            Ip#ipv6{src = IpAddr, dst = Ip#ipv6.src},
            Icmp#icmpv6{type = echo_reply}],
-    BinPkt = aloha_packet:encode_packet(Rep),
-    aloha_nic:send_packet(BinPkt);
+    aloha_nic:send_packet(Rep);
 handle_icmpv6(#icmpv6{type = neighbor_solicitation,
                       data = #neighbor_solicitation{
                           target_address = TargetAddress,
@@ -59,8 +58,7 @@ handle_icmpv6(#icmpv6{type = neighbor_solicitation,
                            override = 1,
                            target_address = TargetAddress,
                            options = [{target_link_layer_address, Addr}]}}],
-    BinPkt = aloha_packet:encode_packet(Rep),
-    aloha_nic:send_packet(BinPkt);
+    aloha_nic:send_packet(Rep);
 handle_icmpv6(Icmp, _Stack, _Opts) ->
     lager:info("icmpv6 unhandled ~p", [aloha_utils:pr(Icmp, ?MODULE)]),
     ok.

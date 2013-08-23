@@ -48,9 +48,9 @@ handle_cast({Type, Pkt, Stack}, State) ->
     Mod = ethertype_mod(Type),
     Mod:handle(Pkt, Stack, State#state.opts),
     {noreply, State};
-handle_cast({send_packet, BinPkt}, #state{opts = Opts} = State) ->
+handle_cast({send_packet, Pkt}, #state{opts = Opts} = State) ->
     Backend = proplists:get_value(backend, Opts),
-    send_packet(BinPkt, Backend),
+    send_packet(Pkt, Backend),
     {noreply, State};
 handle_cast({setopts, Opts}, #state{opts = L}=State) ->
     L2 = aloha_utils:merge_opts(L, Opts),
@@ -81,9 +81,12 @@ ethertype_mod(tcp) -> aloha_tcp.
 enqueue(Msg) ->
     gen_server:cast(self(), Msg).
 
-send_packet(BinPkt) ->
-    gen_server:cast(self(), {send_packet, BinPkt}).
+send_packet(Pkt) ->
+    gen_server:cast(self(), {send_packet, Pkt}).
 
-send_packet(BinPkt, Backend) ->
+send_packet(BinPkt, Backend) when is_binary(BinPkt) ->
     {M, F, A} = Backend,
-    apply(M, F, [BinPkt|A]).
+    apply(M, F, [BinPkt|A]);
+send_packet(Pkt, Backend) ->
+    BinPkt = aloha_packet:encode_packet(Pkt),
+    send_packet(BinPkt, Backend).

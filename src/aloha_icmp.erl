@@ -41,7 +41,6 @@ handle_icmp(#icmp{type = echo_request} = Icmp, Stack, Opts) ->
            Ip#ip{src = IpAddr, dst = Ip#ip.src},
            Icmp#icmp{type = echo_reply}],
     lager:info("icmp ~p", [aloha_utils:pr(Rep, ?MODULE)]),
-    BinPkt = aloha_packet:encode_packet(Rep),
-    aloha_nic:send_packet(BinPkt);
+    aloha_nic:send_packet(Rep);
 handle_icmp(_Icmp, _Stack, _Opts) ->
     ok.
