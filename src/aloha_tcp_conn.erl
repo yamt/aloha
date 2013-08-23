@@ -119,7 +119,7 @@ handle_call({recv, _, _}, _From,
     reply({error, ealready}, State);
 handle_call({recv, Len, Timeout}, From,
             #tcp_state{reader = none, active = false} = State) ->
-    lager:info("TCP user read datalen ~p", [Len]),
+    lager:info("TCP user read request datalen ~p", [Len]),
     TRef = setup_reader_timeout(Timeout),
     State2 = State#tcp_state{reader = {TRef, From, Len, <<>>}},
     State3 = process_readers(State2),
@@ -622,6 +622,7 @@ process_readers(#tcp_state{reader = {_, From, _, _},
        TcpState =:= close_wait orelse TcpState =:= last_ack orelse
        TcpState =:= closing orelse TcpState =:= time_wait orelse
        TcpState =:= closed ->
+    lager:info("TCP user read result closed"),
     gen_server:reply(From, {error, closed}),
     State2 = State#tcp_state{reader = none},
     process_readers(State2);
@@ -630,8 +631,7 @@ process_readers(#tcp_state{rcv_buf = <<>>} = State) ->
 process_readers(#tcp_state{reader = {_, From, 0, Data},
                            rcv_buf = RcvBuf} = State) when RcvBuf =/= <<>> ->
     Data = <<>>,
-    lager:debug("process_reader ~p ~p ~p", [From, Data, RcvBuf]),
-    gen_server:reply(From, {ok, RcvBuf}),
+    reply_data(From, RcvBuf),
     State2 = State#tcp_state{rcv_buf = <<>>, reader = none},
     process_readers(State2);
 process_readers(#tcp_state{reader = {TRef, From, Len, Data},
@@ -640,12 +640,16 @@ process_readers(#tcp_state{reader = {TRef, From, Len, Data},
     State2 = State#tcp_state{rcv_buf = RcvBuf2},
     State3 = case byte_size(Data2) =:= Len of
         true ->
-            gen_server:reply(From, {ok, Data2}),
+            reply_data(From, Data2),
             State2#tcp_state{reader = none};
         false ->
             State2#tcp_state{reader = {TRef, From, Len, Data2}}
     end,
     process_readers(State3).
+
+reply_data(From, Data) ->
+    lager:info("TCP user read result datalen ~p", [byte_size(Data)]),
+    gen_server:reply(From, {ok, Data}).
 
 setup_reader_timeout(infinity) ->
     none;
