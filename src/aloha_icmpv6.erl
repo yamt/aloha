@@ -38,9 +38,27 @@ handle_icmpv6(#icmpv6{type = echo_request} = Icmp, Stack, Opts) ->
     Addr = proplists:get_value(addr, Opts),
     IpAddr = proplists:get_value(ipv6_addr, Opts),
     Rep = [Ether#ether{dst = Ether#ether.src, src = Addr},
-           Ip#ip{src = IpAddr, dst = Ip#ip.src},
+           Ip#ipv6{src = IpAddr, dst = Ip#ipv6.src},
            Icmp#icmpv6{type = echo_reply}],
-    lager:info("icmpv6 ~p", [aloha_utils:pr(Rep, ?MODULE)]),
+    BinPkt = aloha_packet:encode_packet(Rep),
+    aloha_nic:send_packet(BinPkt);
+handle_icmpv6(#icmpv6{type = neighbor_solicitation,
+                      data = #neighbor_solicitation{
+                          target_address = TargetAddress,
+                          options = _Options}} = Icmp,
+              Stack, Opts) ->
+    [Ip, Ether] = Stack,
+    Addr = proplists:get_value(addr, Opts),
+    IpAddr = proplists:get_value(ipv6_addr, Opts),
+    Rep = [Ether#ether{dst = Ether#ether.src, src = Addr},
+           Ip#ipv6{src = IpAddr, dst = Ip#ipv6.src},
+           Icmp#icmpv6{type = neighbor_advertisement,
+                       data = #neighbor_advertisement{
+                           router = 0,
+                           solicited = 1,
+                           override = 1,
+                           target_address = TargetAddress,
+                           options = [{target_link_layer_address, Addr}]}}],
     BinPkt = aloha_packet:encode_packet(Rep),
     aloha_nic:send_packet(BinPkt);
 handle_icmpv6(Icmp, _Stack, _Opts) ->
