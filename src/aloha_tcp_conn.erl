@@ -126,10 +126,16 @@ handle_call({recv, Len, Timeout}, From,
     State4 = tcp_output(State3),
     noreply(State4);
 handle_call(peername, _From, #tcp_state{template = Tmpl} = State) ->
-    [_, #ip{dst = Addr}, #tcp{dst_port = Port}] = Tmpl,
+    {Addr, Port} = case Tmpl of
+        [_, #ip{dst = A}, #tcp{dst_port = P}] -> {A, P};
+        [_, #ipv6{dst = A}, #tcp{dst_port = P}] -> {A, P}
+    end,
     reply({ok, {aloha_utils:bytes_to_ip(Addr), Port}}, State);
 handle_call(sockname, _From, #tcp_state{template = Tmpl} = State) ->
-    [_, #ip{src = Addr}, #tcp{src_port = Port}] = Tmpl,
+    {Addr, Port} = case Tmpl of
+        [_, #ip{src = A}, #tcp{src_port = P}] -> {A, P};
+        [_, #ipv6{src = A}, #tcp{src_port = P}] -> {A, P}
+    end,
     reply({ok, {aloha_utils:bytes_to_ip(Addr), Port}}, State);
 handle_call({controlling_process, NewOwner}, _From,
             #tcp_state{owner = OldOwner} = State) ->

@@ -29,10 +29,15 @@
 -export([bin_not/1, bin_and/2, bin_or/2]).
 
 bytes_to_ip(Bin) when byte_size(Bin) =:= 4 ->
-    bytes_to_ipv4(Bin).
+    bytes_to_ipv4(Bin);
+bytes_to_ip(Bin) when byte_size(Bin) =:= 16 ->
+    bytes_to_ipv6(Bin).
 
 bytes_to_ipv4(<<A, B, C, D>>) ->
     {A, B, C, D}.
+
+bytes_to_ipv6(<<A:16, B:16, C:16, D:16, E:16, F:16, G:16, H:16>>) ->
+    {A, B, C, D, E, F, G, H}.
 
 % normalize Opts1++Opts2
 merge_opts(Opts1, Opts2) ->

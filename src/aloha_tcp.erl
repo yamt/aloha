@@ -29,12 +29,6 @@
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
-pp(Rec) ->
-    io_lib_pretty:print(Rec, fun pp/2).
-
-pp(tcp, _N) ->
-    record_info(fields, tcp).
-
 start() ->
     ets:new(aloha_tcp_conn, [set, named_table, public]),
     ets:new(aloha_tcp_listener, [set, named_table, public]).
@@ -42,7 +36,6 @@ start() ->
 handle(Pkt, Stack, Opts) ->
     [Ip, _Ether] = Stack,
     {Tcp, bin, Data} = aloha_packet:decode(tcp, Pkt, Stack),
-    lager:debug("TCP ~s ~w from ~w~n", [pp(Tcp), Data, Ip#ip.src]),
     handle_tcp(Tcp, Stack, Data, Opts).
 
 % Key is either of Port or {IP, Port}
@@ -61,11 +54,16 @@ lookup_listener(Key) ->
             {{listener_port_key(Key),'$1'}, [], ['$1']}],
     ets:select(aloha_tcp_listener, Spec).
 
+make_reply_template(#ip{src = Src, dst = Dst} = Ip) ->
+    Ip#ip{src = Dst, dst = Src, options = <<>>};
+make_reply_template(#ipv6{src = Src, dst = Dst} = Ip) ->
+    Ip#ipv6{src = Dst, dst = Src}.
+
 make_reply_template(Tcp, Stack) ->
     [Ip, Ether] = Stack,
     % swap dst and src
     [Ether#ether{dst = Ether#ether.src, src = Ether#ether.dst},
-     Ip#ip{src = Ip#ip.dst, dst = Ip#ip.src, options = <<>>},
+     make_reply_template(Ip),
      #tcp{dst_port = Tcp#tcp.src_port, src_port = Tcp#tcp.dst_port}].
 
 new_connection(#tcp{syn = 0}, _, _, _) ->
@@ -89,7 +87,12 @@ new_connection(Tcp, Stack, Key, Opts, Listener) ->
 handle_tcp(#tcp{checksum=good} = Tcp, Stack, Data, Opts) ->
     lager:info("RECV ~s", [tcp_summary(Tcp, Data)]),
     [Ip|_] = Stack,
-    Key = {Ip#ip.src, Ip#ip.dst, Tcp#tcp.src_port, Tcp#tcp.dst_port},
+    Key = case Ip of
+        #ip{src = Src, dst = Dst} ->
+            {Src, Dst, Tcp#tcp.src_port, Tcp#tcp.dst_port};
+        #ipv6{src = Src, dst = Dst} ->
+            {Src, Dst, Tcp#tcp.src_port, Tcp#tcp.dst_port}
+    end,
     Pid = try ets:lookup_element(aloha_tcp_conn, Key, 2)
     catch
         error:badarg ->

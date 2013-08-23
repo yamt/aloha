@@ -37,4 +37,3 @@ TODO
 - use gproc instead of raw ets tables?
 - arp requester
 - arp expiry
-- ipv6
