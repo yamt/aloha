@@ -34,7 +34,7 @@ start() ->
     ets:new(aloha_tcp_listener, [set, named_table, public]).
 
 handle(Pkt, Stack, Opts) ->
-    [Ip, _Ether] = Stack,
+    [_Ip, _Ether] = Stack,
     {Tcp, bin, Data} = aloha_packet:decode(tcp, Pkt, Stack),
     handle_tcp(Tcp, Stack, Data, Opts).
 
