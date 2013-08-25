@@ -38,6 +38,7 @@ start_link(Key, Opts) ->
     gen_server:start_link(?MODULE, {Key, Opts}, []).
 
 init({Key, Opts}) ->
+    false = process_flag(trap_exit, true),
     true = ets:insert_new(?MODULE, {Key, self()}),
     DefOpts = [{active, true}],
     Opts2 = lists:keydelete(reuseaddr, 1, Opts),

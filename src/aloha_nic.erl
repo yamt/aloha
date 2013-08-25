@@ -34,6 +34,7 @@
 -record(state, {opts}).
 
 init(Opts) ->
+    false = process_flag(trap_exit, true),
     Key = proplists:get_value(key, Opts),
     true = ets:insert_new(?MODULE, {Key, self()}),
     {ok, #state{opts=Opts}}.
