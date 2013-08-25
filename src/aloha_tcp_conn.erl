@@ -40,7 +40,7 @@
                     fin = 0, rexmit_timer, delack_timer,
                     rcv_nxt, rcv_adv,
                     rcv_buf, rcv_buf_size,
-                    backend, template,
+                    mss, backend, template,
                     state, owner, active = false, suppress = false,
                     pending_ctl = [],
                     key,
@@ -52,6 +52,8 @@
 -define(PERSIST_TIMEOUT, 3000).
 -define(DELACK_TIMEOUT, 500).
 -define(TIME_WAIT_TIMEOUT, (2 * ?MSL)).
+
+-define(DEFAULT_MSS, (576 - 20 - 20)).  % as per RFC 879 and RFC 1122
 
 pp(#tcp_state{snd_buf = SndBuf} = State) when is_binary(SndBuf) ->
     % XXX hack to make this less verbose
@@ -72,9 +74,11 @@ init(Opts) ->
     false = process_flag(trap_exit, true),
     Backend = proplists:get_value(backend, Opts),
     Key = proplists:get_value(key, Opts),
+    Mtu = proplists:get_value(mtu, Opts, 1500),
     Owner = proplists:get_value(owner, Opts),
     State = #tcp_state{backend = Backend,
                        template = proplists:get_value(template, Opts),
+                       mss = Mtu - 20 - 20,
                        snd_nxt = 0,  % ISS
                        snd_una = 0,  % ISS
                        rexmit_timer = make_ref(),
@@ -255,9 +259,16 @@ process_ack(#tcp{ack = 1} = Tcp, State) ->
     lager:debug("out of range ack~n~s~n~s", [pp(Tcp), pp(State)]),
     State.
 
+update_mss(#tcp{syn = 0}, State) ->
+    State;
+update_mss(#tcp{options = Options}, #tcp_state{mss = OldMSS} = State) ->
+    MSS = proplists:get_value(mss, Options, ?DEFAULT_MSS),
+    State#tcp_state{mss = min(OldMSS, MSS)}.
+
 update_sender(Tcp, State) ->
     State2 = process_ack(Tcp, State),
-    State2#tcp_state{snd_wnd = Tcp#tcp.window}.
+    State3 = update_mss(Tcp, State2),
+    State3#tcp_state{snd_wnd = Tcp#tcp.window}.
 
 una_syn(#tcp_state{state = syn_received}) -> 1;
 una_syn(#tcp_state{state = syn_sent}) -> 1;
@@ -416,7 +427,8 @@ tcp_output(CanProbe,
            AckNow,
            #tcp_state{snd_una = SndUna,
                       snd_nxt = SndNxt,
-                      snd_wnd = SndWnd} = State) ->
+                      snd_wnd = SndWnd,
+                      mss = MSS} = State) ->
     {Syn, Data, Fin} = to_send(State),
     % probe if
     %   1. window is closed
@@ -428,7 +440,6 @@ tcp_output(CanProbe,
         true ->
             1;
         false ->
-            MSS = 576 - 20 - 20,  % default MSS as per RFC 879 and RFC 1122
             min(SndWnd, MSS)
     end,
     {Syn2, Data2, Fin2, SndNxt} =
