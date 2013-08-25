@@ -69,6 +69,7 @@ pp(_, _) ->
     no.
 
 init(Opts) ->
+    false = process_flag(trap_exit, true),
     Backend = proplists:get_value(backend, Opts),
     Key = proplists:get_value(key, Opts),
     Owner = proplists:get_value(owner, Opts),
@@ -203,6 +204,11 @@ handle_info({timeout, TRef, delack_timeout},
     lager:debug("delack timer expired"),
     State2 = tcp_output(true, State),
     noreply(State2);
+handle_info({'EXIT', Pid, Reason}, #tcp_state{owner = Pid} = State) ->
+    lager:info("owner ~p exited", [Pid]),
+    State2 = shutdown_receiver(State),
+    State3 = shutdown_sender(State2),
+    noreply(State3#tcp_state{owner = none});
 handle_info(Info, State) ->
     lager:info("handle_info: ~w", [Info]),
     noreply(State).
@@ -368,10 +374,11 @@ segment_arrival({#tcp{} = Tcp, Data}, State) ->
     lager:info("TCP unimplemented datalen ~p~n~s", [byte_size(Data), pp(Tcp)]),
     noreply(State).
 
-next_state_on_close(established) -> true, fin_wait_1;
+next_state_on_close(established) -> fin_wait_1;
 next_state_on_close(syn_received) -> fin_wait_1;
 next_state_on_close(syn_sent) -> closed;
-next_state_on_close(close_wait) -> last_ack.
+next_state_on_close(close_wait) -> last_ack;
+next_state_on_close(Other) -> Other.
 
 % enqueue fin except the case of syn_sent -> closed
 enqueue_fin(closed, State) ->
