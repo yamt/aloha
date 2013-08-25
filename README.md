@@ -35,5 +35,6 @@ TODO
 - ip fragment
 - timeout
 - use gproc instead of raw ets tables?
-- arp requester
-- arp expiry
+- arp/ndp requester
+- arp/ndp table and expiry
+- handle exiting processes in accept/read/write queues
