@@ -30,7 +30,6 @@ TODO
 - exit_on_close
 - urg
 - sws avoidance
-- mss option
 - ip/port namespace
 - ip fragment
 - timeout
