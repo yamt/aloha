@@ -89,19 +89,23 @@ init(Opts) ->
     {ok, State}.
 
 reply(Reply, State) ->
-    reply(should_exit(State), Reply, State).
+    reply(should_exit(State), should_hibernate(State), Reply, State).
 
-reply(true, Reply, State) ->
+reply(true, _, Reply, State) ->
     {stop, normal, Reply, State};
-reply(false, Reply, State) ->
+reply(false, true, Reply, State) ->
+    {reply, Reply, State, hibernate};
+reply(false, false, Reply, State) ->
     {reply, Reply, State}.
 
 noreply(State) ->
-    noreply(should_exit(State), State).
+    noreply(should_exit(State), should_hibernate(State), State).
 
-noreply(true, State) ->
+noreply(true, _, State) ->
     {stop, normal, State};
-noreply(false, State) ->
+noreply(false, true, State) ->
+    {noreply, State, hibernate};
+noreply(false, false, State) ->
     {noreply, State}.
 
 handle_call({send, Data}, From, State) ->
@@ -494,6 +498,11 @@ build_and_send_packet(Syn, Data, Fin,
 should_exit(#tcp_state{state = closed, owner = none}) ->
     true;
 should_exit(_) ->
+    false.
+
+should_hibernate(#tcp_state{state = time_wait}) ->
+    true;
+should_hibernate(_) ->
     false.
 
 %%%%%%%%%%%%%%%%%%%% user interface %%%%%%%%%%%%%%%%%%%%
