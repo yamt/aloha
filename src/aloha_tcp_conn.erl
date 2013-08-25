@@ -205,7 +205,7 @@ handle_info({timeout, TRef, delack_timeout},
     State2 = tcp_output(true, State),
     noreply(State2);
 handle_info({'EXIT', Pid, Reason}, #tcp_state{owner = Pid} = State) ->
-    lager:info("owner ~p exited", [Pid]),
+    lager:info("owner ~p exited with reason ~p", [Pid, Reason]),
     State2 = shutdown_receiver(State),
     State3 = shutdown_sender(State2),
     noreply(State3#tcp_state{owner = none});
