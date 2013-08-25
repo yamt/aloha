@@ -62,8 +62,7 @@ recv({aloha_socket, SockPid}, Len, Timeout) ->
 recv(Sock, Len, Timeout) ->
     gen_tcp:recv(Sock, Len, Timeout).
 
-close({aloha_socket, SockPid} = Sock) ->
-    shutdown(Sock, read_write),
+close({aloha_socket, SockPid}) ->
     gen_server:call(SockPid, close, infinity);
 close(Sock) ->
     gen_tcp:close(Sock).

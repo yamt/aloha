@@ -151,8 +151,7 @@ handle_call({controlling_process, NewOwner}, _From,
     reply(ok, State2);
 handle_call(close, {Pid, _}, #tcp_state{owner = Pid} = State) ->
     lager:info("TCP user close ~p", [self()]),
-    State2 = State#tcp_state{owner = none},
-    reply(ok, State2);
+    reply(ok, close(State));
 handle_call({setopts, Opts}, _From, State) ->
     {Ret, State2} = setopts(proplists:unfold(Opts), State),
     State3 = deliver_to_app(State2),
@@ -210,9 +209,7 @@ handle_info({timeout, TRef, delack_timeout},
     noreply(State2);
 handle_info({'EXIT', Pid, Reason}, #tcp_state{owner = Pid} = State) ->
     lager:info("owner ~p exited with reason ~p", [Pid, Reason]),
-    State2 = shutdown_receiver(State),
-    State3 = shutdown_sender(State2),
-    noreply(State3#tcp_state{owner = none});
+    noreply(close(State));
 handle_info(Info, State) ->
     lager:info("handle_info: ~w", [Info]),
     noreply(State).
@@ -686,6 +683,13 @@ shutdown_sender(State) ->
     State2 = update_state_on_close(State),
     State3 = enqueue_fin(State2#tcp_state.state, State2),
     tcp_output(State3).
+
+%% close
+
+close(State) ->
+    State2 = shutdown_receiver(State),
+    State3 = shutdown_sender(State2),
+    State3#tcp_state{owner = none}.
 
 %% setopt
 

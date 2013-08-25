@@ -38,4 +38,3 @@ TODO
 - arp/ndp requester
 - arp/ndp table and expiry
 - handle exiting processes in accept/read/write queues
-- clean up close paths
