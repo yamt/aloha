@@ -37,10 +37,12 @@
 
 -record(tcp_state, {snd_una, snd_nxt, snd_wnd,
                     snd_buf, snd_buf_size,
+                    snd_mss,
                     fin = 0, rexmit_timer, delack_timer,
                     rcv_nxt, rcv_adv,
                     rcv_buf, rcv_buf_size,
-                    mss, backend, template,
+                    rcv_mss,
+                    backend, template,
                     state, owner, active = false, suppress = false,
                     pending_ctl = [],
                     key,
@@ -74,16 +76,18 @@ init(Opts) ->
     false = process_flag(trap_exit, true),
     Backend = proplists:get_value(backend, Opts),
     Key = proplists:get_value(key, Opts),
-    Mtu = proplists:get_value(mtu, Opts, 1500),
+    MTU = proplists:get_value(mtu, Opts, 1500),
+    MSS = MTU - 20 - 20,
     Owner = proplists:get_value(owner, Opts),
     State = #tcp_state{backend = Backend,
                        template = proplists:get_value(template, Opts),
-                       mss = Mtu - 20 - 20,
                        snd_nxt = 0,  % ISS
                        snd_una = 0,  % ISS
-                       rexmit_timer = make_ref(),
                        snd_buf = <<>>, snd_buf_size = 3000,
+                       snd_mss = MTU - 20 - 20,
+                       rexmit_timer = make_ref(),
                        rcv_buf = <<>>, rcv_buf_size = 3000,
+                       rcv_mss = MTU - 20 - 20,
                        state = closed,
                        owner = Owner,
                        key = Key},
@@ -261,9 +265,9 @@ process_ack(#tcp{ack = 1} = Tcp, State) ->
 
 update_mss(#tcp{syn = 0}, State) ->
     State;
-update_mss(#tcp{options = Options}, #tcp_state{mss = OldMSS} = State) ->
+update_mss(#tcp{options = Options}, #tcp_state{snd_mss = OldMSS} = State) ->
     MSS = proplists:get_value(mss, Options, ?DEFAULT_MSS),
-    State#tcp_state{mss = min(OldMSS, MSS)}.
+    State#tcp_state{snd_mss = min(OldMSS, MSS)}.
 
 update_sender(Tcp, State) ->
     State2 = process_ack(Tcp, State),
@@ -428,7 +432,7 @@ tcp_output(CanProbe,
            #tcp_state{snd_una = SndUna,
                       snd_nxt = SndNxt,
                       snd_wnd = SndWnd,
-                      mss = MSS} = State) ->
+                      snd_mss = SMSS} = State) ->
     {Syn, Data, Fin} = to_send(State),
     % probe if
     %   1. window is closed
@@ -440,7 +444,7 @@ tcp_output(CanProbe,
         true ->
             1;
         false ->
-            min(SndWnd, MSS)
+            min(SndWnd, SMSS)
     end,
     {Syn2, Data2, Fin2, SndNxt} =
         aloha_tcp_seq:trim(Syn, Data, Fin, SndNxt, SndNxt, SndNxt + SndWnd2),
@@ -484,6 +488,7 @@ build_and_send_packet(Syn, Data, Fin,
                       #tcp_state{snd_nxt = SndNxt,
                                  rcv_nxt = RcvNxt,
                                  backend = Backend,
+                                 rcv_mss = RMSS,
                                  template = [Ether, Ip, TcpTmpl]} = State) ->
     Win = rcv_wnd(State),
     Tcp = TcpTmpl#tcp{
@@ -494,7 +499,7 @@ build_and_send_packet(Syn, Data, Fin,
         ack = 1,
         psh = push(Syn, Data, Fin, State),
         window = Win,
-        options = <<>>
+        options = [{mss, RMSS} || Syn =:= 1]
     },
     lager:debug("TCP send datalen ~p~n~s~n~s",
                 [byte_size(Data), pp(Tcp), pp(State)]),
