@@ -43,11 +43,11 @@ listen(Key, Opts) ->
     {ok, Pid} = aloha_tcp_listener:start_link(Key, Opts),
     {ok, {aloha_socket, Pid}}.
 
-listener_key({_SrcIp, DstIp, _SrcPort, DstPort}) ->
-    {DstIp, DstPort}.
+listener_key({NS, {_SrcIp, DstIp, _SrcPort, DstPort}}) ->
+    {NS, {DstIp, DstPort}}.
 
-listener_port_key({_SrcIp, _DstIp, _SrcPort, DstPort}) ->
-    DstPort.
+listener_port_key({NS, {_SrcIp, _DstIp, _SrcPort, DstPort}}) ->
+    {NS, DstPort}.
 
 lookup_listener(Key) ->
     Spec = [{{listener_key(Key),     '$1'}, [], ['$1']},
@@ -86,12 +86,13 @@ new_connection(Tcp, Stack, Key, Opts, Listener) ->
 
 handle_tcp(#tcp{checksum=good} = Tcp, Stack, Data, Opts) ->
     lager:info("RECV ~s", [tcp_summary(Tcp, Data)]),
+    NS = proplists:get_value(namespace, Opts),
     [Ip|_] = Stack,
     Key = case Ip of
         #ip{src = Src, dst = Dst} ->
-            {Src, Dst, Tcp#tcp.src_port, Tcp#tcp.dst_port};
+            {NS, {Src, Dst, Tcp#tcp.src_port, Tcp#tcp.dst_port}};
         #ipv6{src = Src, dst = Dst} ->
-            {Src, Dst, Tcp#tcp.src_port, Tcp#tcp.dst_port}
+            {NS, {Src, Dst, Tcp#tcp.src_port, Tcp#tcp.dst_port}}
     end,
     Pid = try ets:lookup_element(aloha_tcp_conn, Key, 2)
     catch

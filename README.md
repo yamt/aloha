@@ -30,7 +30,6 @@ TODO
 - exit_on_close
 - urg
 - sender sws avoidance
-- ip/port namespace
 - ip fragment
 - timeout
 - use gproc instead of raw ets tables?

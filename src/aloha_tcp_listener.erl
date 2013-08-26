@@ -47,9 +47,10 @@ init({Key, Opts}) ->
     State = #listen_state{key = Key, opts = Opts4},
     {ok, State}.
 
-handle_call(sockname, _From, #listen_state{key = {Addr, Port}} = State) ->
+handle_call(sockname, _From,
+            #listen_state{key = {_NS, {Addr, Port}}} = State) ->
     {reply, {ok, {aloha_utils:bytes_to_ip(Addr), Port}}, State};
-handle_call(sockname, _From, #listen_state{key = Port} = State) ->
+handle_call(sockname, _From, #listen_state{key = {_NS, Port}} = State) ->
     {reply, {ok, {{0, 0, 0, 0}, Port}}, State};
 handle_call({setops, NewOpts}, _From, #listen_state{opts = Opts} = State) ->
     State2 = State#listen_state{opts = aloha_utils:merge_opts(NewOpts, Opts)},
