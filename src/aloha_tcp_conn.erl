@@ -657,10 +657,10 @@ process_readers(#tcp_state{reader = {_, From, _, _},
     process_readers(State2);
 process_readers(#tcp_state{rcv_buf = <<>>} = State) ->
     State;
-process_readers(#tcp_state{reader = {_, From, 0, Data},
+process_readers(#tcp_state{reader = {TRef, From, 0, Data},
                            rcv_buf = RcvBuf} = State) when RcvBuf =/= <<>> ->
     Data = <<>>,
-    reply_data(From, RcvBuf),
+    reply_data(TRef, From, RcvBuf),
     State2 = State#tcp_state{rcv_buf = <<>>, reader = none},
     process_readers(State2);
 process_readers(#tcp_state{reader = {TRef, From, Len, Data},
@@ -669,16 +669,22 @@ process_readers(#tcp_state{reader = {TRef, From, Len, Data},
     State2 = State#tcp_state{rcv_buf = RcvBuf2},
     State3 = case byte_size(Data2) =:= Len of
         true ->
-            reply_data(From, Data2),
+            reply_data(TRef, From, Data2),
             State2#tcp_state{reader = none};
         false ->
             State2#tcp_state{reader = {TRef, From, Len, Data2}}
     end,
     process_readers(State3).
 
-reply_data(From, Data) ->
+reply_data(TRef, From, Data) ->
     lager:info("TCP user read result datalen ~p", [byte_size(Data)]),
+    cancel_reader_timeout(TRef),
     gen_server:reply(From, {ok, Data}).
+
+cancel_reader_timeout(none) ->
+    none;
+cancel_reader_timeout(TRef) ->
+    erlang:cancel_timer(TRef).
 
 setup_reader_timeout(infinity) ->
     none;
