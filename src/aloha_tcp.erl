@@ -114,6 +114,8 @@ make_rst(Rep, #tcp{ack = 0} = Tcp, Data) ->
 make_rst(Rep, Tcp, _Data) ->
     Rep#tcp{seqno = Tcp#tcp.ackno, rst = 1}.
 
+reply_rst(#tcp{rst = 1}, _, _, _) ->
+    ok;
 reply_rst(Tcp, Stack, Data, Backend) ->
     [Ether, Ip, Tcp2] = make_reply_template(Tcp, Stack),
     Tcp3 = make_rst(Tcp2, Tcp, Data),
