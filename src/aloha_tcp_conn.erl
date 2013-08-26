@@ -39,7 +39,8 @@
                     snd_buf, snd_buf_size,
                     snd_mss,
                     fin = 0, rexmit_timer, delack_timer,
-                    rcv_nxt, rcv_adv,
+                    rcv_nxt,
+                    rcv_adv,  % the right edge of advertised window
                     rcv_buf, rcv_buf_size,
                     rcv_mss,
                     backend, template,
@@ -410,6 +411,21 @@ rcv_wnd(#tcp_state{rcv_adv = undefined} = Tcp) ->
 rcv_wnd(#tcp_state{rcv_nxt = Nxt, rcv_adv = Adv} = Tcp) ->
     max(rcv_buf_space(Tcp), Adv - Nxt).
 
+% window size to advertise
+% RFC 1122 4.2.3.3 receiver side SWS avoidance
+choose_rcv_wnd(#tcp_state{rcv_adv = undefined} = State) ->
+    rcv_buf_space(State);
+choose_rcv_wnd(#tcp_state{rcv_nxt = Nxt, rcv_adv = Adv} = State) ->
+    choose_rcv_wnd(rcv_buf_space(State), Adv - Nxt, State).
+
+choose_rcv_wnd(NextWnd, AdvWnd,
+               #tcp_state{rcv_buf_size = BufSize, rcv_mss = MSS})
+        when NextWnd - AdvWnd >= BufSize div 2 orelse
+             NextWnd - AdvWnd >= MSS ->
+    NextWnd;
+choose_rcv_wnd(_, AdvWnd, _) ->
+    AdvWnd.
+
 tcp_output(State) ->
     tcp_output(false, State).
 
@@ -490,7 +506,7 @@ build_and_send_packet(Syn, Data, Fin,
                                  backend = Backend,
                                  rcv_mss = RMSS,
                                  template = [Ether, Ip, TcpTmpl]} = State) ->
-    Win = rcv_wnd(State),
+    Win = choose_rcv_wnd(State),
     Tcp = TcpTmpl#tcp{
         seqno = SndNxt,
         ackno = RcvNxt,

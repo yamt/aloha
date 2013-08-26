@@ -29,7 +29,7 @@ TODO
 - active open
 - exit_on_close
 - urg
-- sws avoidance
+- sender sws avoidance
 - ip/port namespace
 - ip fragment
 - timeout
