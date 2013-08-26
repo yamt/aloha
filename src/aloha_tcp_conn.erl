@@ -84,10 +84,10 @@ init(Opts) ->
                        snd_nxt = 0,  % ISS
                        snd_una = 0,  % ISS
                        snd_buf = <<>>, snd_buf_size = 3000,
-                       snd_mss = MTU - 20 - 20,
+                       snd_mss = MSS,
                        rexmit_timer = make_ref(),
                        rcv_buf = <<>>, rcv_buf_size = 3000,
-                       rcv_mss = MTU - 20 - 20,
+                       rcv_mss = MSS,
                        state = closed,
                        owner = Owner,
                        key = Key},
