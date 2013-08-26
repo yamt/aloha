@@ -64,11 +64,11 @@ handle_cast({tcp_connected, {aloha_socket, Sock}}, State) ->
     State2 = add_socket(Sock, State),
     {noreply, process_accept(State2)};
 handle_cast(M, State) ->
-    lager:info("unknown msg ~w", [M]),
+    lager:info("unknown msg ~p", [M]),
     {noreply, State}.
 
 handle_info(Info, State) ->
-    lager:info("handle_info: ~w", [Info]),
+    lager:info("handle_info: ~p", [Info]),
     {noreply, State}.
 
 terminate(_Reason, #listen_state{key = Key}) ->

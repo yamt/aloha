@@ -57,11 +57,11 @@ handle_cast({setopts, Opts}, #state{opts = L}=State) ->
     L2 = aloha_utils:merge_opts(L, Opts),
     {noreply, State#state{opts=L2}};
 handle_cast(M, State) ->
-    lager:info("unknown msg ~w~n", [M]),
+    lager:info("unknown msg ~p", [M]),
     {noreply, State}.
 
 handle_info(Info, State) ->
-    lager:info("handle_info: ~w~n", [Info]),
+    lager:info("handle_info: ~p", [Info]),
     {noreply, State}.
 
 terminate(_Reason, #state{opts = Opts}) ->

@@ -219,7 +219,7 @@ handle_info({'EXIT', Pid, Reason}, #tcp_state{owner = Pid} = State) ->
     lager:info("owner ~p exited with reason ~p", [Pid, Reason]),
     noreply(close(State));
 handle_info(Info, State) ->
-    lager:info("handle_info: ~w", [Info]),
+    lager:info("handle_info: ~p", [Info]),
     noreply(State).
 
 terminate(Reason, #tcp_state{key = Key} = State) ->
