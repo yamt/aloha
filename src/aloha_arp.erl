@@ -29,13 +29,17 @@
 
 handle(Pkt, Stack, Opts) ->
     {Arp, _Next, _Rest} = aloha_packet:decode(arp, Pkt, Stack),
-    Addr = proplists:get_value(addr, Opts),
-    handle_arp(Arp, Addr).
+    Addr = proplists:get_value(ip_addr, Opts),
+    handle_arp(Arp, Addr, Opts).
 
-handle_arp(#arp{op = request, sha = Sha, spa = Spa, tpa = Tpa} = Arp, Addr) ->
-    lager:info("arp request who-has ~w tell ~w (~w)~n", [Tpa, Spa, Sha]),
-    Rep = [#ether{dst = Sha, src = Addr, type = arp},
-           Arp#arp{op = reply, tpa = Spa, tha = Sha, spa = Tpa, sha = Addr}],
+handle_arp(#arp{op = request, sha = Sha, spa = Spa, tpa = Addr} = Arp, Addr,
+           Opts) ->
+    LLAddr = proplists:get_value(addr, Opts),
+    lager:info("arp request who-has ~w tell ~w (~w)", [Addr, Spa, Sha]),
+    Rep = [#ether{dst = Sha, src = LLAddr, type = arp},
+           Arp#arp{op = reply, tpa = Spa, tha = Sha, spa = Addr, sha = LLAddr}],
     aloha_nic:send_packet(Rep);
-handle_arp(#arp{}, _Addr) ->
+handle_arp(#arp{op = reply, sha = Sha, spa = Spa}, _Addr, _Opts) ->
+    lager:info("arp reply ~w has ~w", [Sha, Spa]);
+handle_arp(#arp{}, _Addr, _Opts) ->
     ok.
