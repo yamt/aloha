@@ -120,14 +120,14 @@ reply_rst(#tcp{rst = 1}, _, _, _) ->
 reply_rst(Tcp, Stack, Data, Backend) ->
     [Ether, Ip, Tcp2] = make_reply_template(Tcp, Stack),
     Tcp3 = make_rst(Tcp2, Tcp, Data),
-    send_packet([Ether, Ip, Tcp3, <<>>], Backend).
+    aloha_neighbor:send_packet([Ether, Ip, Tcp3, <<>>], Backend).
 
 send_packet(Pkt, Backend) ->
     [_, _, Tcp, Data] = Pkt,
     lager:info("SEND ~s", [tcp_summary(Tcp, Data)]),
-%   [aloha_nic:send_packet(Pkt, Backend) ||
+%   [aloha_neighbor:send_packet(Pkt, Backend) ||
 %    random:uniform() > 0.5],  % drop packets for testing
-    aloha_nic:send_packet(Pkt, Backend).
+    aloha_neighbor:send_packet(Pkt, Backend).
 
 flag(1, C) ->
     C;

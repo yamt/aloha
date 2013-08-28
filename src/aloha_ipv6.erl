@@ -30,7 +30,7 @@
 
 handle(Pkt, Stack, Opts) ->
     {Ip, Next, Rest} = aloha_packet:decode(ipv6, Pkt, Stack),
-    IpAddr = proplists:get_value(ipv6_addr, Opts, none),
+    IpAddr = proplists:get_value(ipv6, Opts, none),
     Mcast = solicited_node_multicast(IpAddr),
     handle_ipv6(Ip, Next, Rest, IpAddr, Mcast, Stack).
 

@@ -29,7 +29,7 @@
 
 handle(Pkt, Stack, Opts) ->
     {Ip, Next, Rest} = aloha_packet:decode(ip, Pkt, Stack),
-    IpAddr = proplists:get_value(ip_addr, Opts),
+    IpAddr = proplists:get_value(ip, Opts),
     Mask = proplists:get_value(ip_mask, Opts, <<255,255,255,0>>),
     Bcast = aloha_utils:bin_or(IpAddr, aloha_utils:bin_not(Mask)),
     handle_ip(Ip, Next, Rest, IpAddr, Bcast, Stack).

@@ -30,7 +30,7 @@
 
 handle(Pkt, Stack, Opts) ->
     {Icmp, _Next, <<>>} = aloha_packet:decode(icmpv6, Pkt, Stack),
-    Addr = proplists:get_value(ipv6_addr, Opts),
+    Addr = proplists:get_value(ipv6, Opts),
     handle_icmpv6(Icmp, Stack, Addr, Opts).
 
 handle_icmpv6(#icmpv6{checksum = bad} = Icmp, _Stack, _Addr, _Opts) ->
@@ -38,7 +38,7 @@ handle_icmpv6(#icmpv6{checksum = bad} = Icmp, _Stack, _Addr, _Opts) ->
 handle_icmpv6(#icmpv6{type = echo_request} = Icmp, Stack, _Addr, Opts) ->
     [Ip, Ether] = Stack,
     Addr = proplists:get_value(addr, Opts),
-    IpAddr = proplists:get_value(ipv6_addr, Opts),
+    IpAddr = proplists:get_value(ipv6, Opts),
     Rep = [Ether#ether{dst = Ether#ether.src, src = Addr},
            Ip#ipv6{src = IpAddr, dst = Ip#ipv6.src},
            Icmp#icmpv6{type = echo_reply}],
@@ -67,7 +67,8 @@ handle_icmpv6(#icmpv6{type = neighbor_advertisement,
                           options = Options}},
               _Stack, _Addr, _Opts) ->
     LLAddr = proplists:get_value(target_link_layer_address, Options),
-    lager:info("icmpv6 neighbor adv ~w has ~w", [LLAddr, TargetAddress]);
+    lager:info("icmpv6 neighbor adv ~w has ~w", [LLAddr, TargetAddress]),
+    aloha_neighbor:notify(ipv6, TargetAddress, LLAddr);
 handle_icmpv6(Icmp, _Stack, _Addr, _Opts) ->
     lager:info("icmpv6 unhandled ~p", [aloha_utils:pr(Icmp, ?MODULE)]),
     ok.

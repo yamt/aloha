@@ -36,7 +36,7 @@ handle_icmp(#icmp{checksum = bad} = Icmp, _Stack, _Opts) ->
 handle_icmp(#icmp{type = echo_request} = Icmp, Stack, Opts) ->
     [Ip, Ether] = Stack,
     Addr = proplists:get_value(addr, Opts),
-    IpAddr = proplists:get_value(ip_addr, Opts),
+    IpAddr = proplists:get_value(ip, Opts),
     Rep = [Ether#ether{dst = Ether#ether.src, src = Addr},
            Ip#ip{src = IpAddr, dst = Ip#ip.src},
            Icmp#icmp{type = echo_reply}],
