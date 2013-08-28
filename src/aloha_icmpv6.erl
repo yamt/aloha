@@ -24,6 +24,7 @@
 
 -module(aloha_icmpv6).
 -export([handle/3]).
+-export([discovery_packet/3]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
@@ -70,3 +71,12 @@ handle_icmpv6(#icmpv6{type = neighbor_advertisement,
 handle_icmpv6(Icmp, _Stack, _Addr, _Opts) ->
     lager:info("icmpv6 unhandled ~p", [aloha_utils:pr(Icmp, ?MODULE)]),
     ok.
+
+discovery_packet(Target, OurAddr, OurLLAddr) ->
+    [#ether{dst = <<33,33,33,0,0,0>>, src = OurLLAddr, type = ipv6},
+     #ipv6{next_header = icmpv6, src = OurAddr,
+           dst = aloha_ipv6:solicited_node_multicast(Target)},
+     #icmpv6{type = neighbor_solicitation,
+             data = #neighbor_solicitation{
+                target_address = Target,
+                options = [{source_link_layer_address, OurLLAddr}]}}].

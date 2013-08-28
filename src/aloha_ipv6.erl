@@ -24,6 +24,7 @@
 
 -module(aloha_ipv6).
 -export([handle/3]).
+-export([solicited_node_multicast/1]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
