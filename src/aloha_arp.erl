@@ -24,6 +24,7 @@
 
 -module(aloha_arp).
 -export([handle/3]).
+-export([discovery_packet/3]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
@@ -43,3 +44,8 @@ handle_arp(#arp{op = reply, sha = Sha, spa = Spa}, _Addr, _Opts) ->
     lager:info("arp reply ~w has ~w", [Sha, Spa]);
 handle_arp(#arp{}, _Addr, _Opts) ->
     ok.
+
+discovery_packet(Target, OurAddr, OurLLAddr) ->
+    [#ether{dst = <<255,255,255,255,255,255>>, src = OurLLAddr, type = arp},
+     #arp{op = request, sha = OurLLAddr, spa = OurAddr, tha = <<0,0,0,0,0,0>>,
+          tpa = Target}].
