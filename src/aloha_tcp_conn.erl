@@ -344,6 +344,8 @@ update_state_on_flags(_, State) ->
     State.
 
 % in-window check  RFC 793 3.3. (p.26)
+accept_check(#tcp{syn = 0} = Tcp, Data, #tcp_state{rcv_nxt = undefined}) ->
+    false;
 accept_check(#tcp{seqno = Seq} = Tcp, Data,
              #tcp_state{rcv_nxt = RcvNxt} = State) ->
     aloha_tcp_seq:accept_check(Seq, seg_len(Tcp, Data), RcvNxt, rcv_wnd(State)).
