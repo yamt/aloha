@@ -23,8 +23,8 @@
 % SUCH DAMAGE.
 
 -module(aloha_nic_loopback).
--export([create/1]).
--export([loopback/1]).
+-export([create/3]).
+-export([loopback/2]).
 
 % a convenient routine to create loopback interface.
 create(NS, Id, Addr) ->
