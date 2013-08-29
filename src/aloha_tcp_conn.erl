@@ -25,6 +25,7 @@
 -module(aloha_tcp_conn).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
+-export([start/1]).
 
 -export([calc_next_seq/2, seg_len/2]).
 
@@ -74,6 +75,9 @@ pp(tcp, _N) ->
 pp(_, _) ->
     no.
 
+start(Opts) ->
+    gen_server:start(?MODULE, Opts, []).
+
 init(Opts) ->
     false = process_flag(trap_exit, true),
     Backend = proplists:get_value(backend, Opts),
@@ -88,6 +92,7 @@ init(Opts) ->
                        snd_una = 0,  % ISS
                        snd_buf = <<>>, snd_buf_size = 3000,
                        snd_mss = MSS,
+                       snd_wnd = 1,  % for initial syn
                        rexmit_timer = make_ref(),
                        rcv_buf = <<>>, rcv_buf_size = 3000,
                        rcv_mss = MSS,
@@ -120,6 +125,10 @@ noreply(false, true, State) ->
 noreply(false, false, State) ->
     {noreply, State}.
 
+handle_call(connect, _From, #tcp_state{state = closed} = State) ->
+    State2 = set_state(syn_sent, State),
+    State3 = tcp_output(State2),
+    reply(ok, State3);
 handle_call({send, Data}, From, State) ->
     lager:info("TCP user write datalen ~p", [byte_size(Data)]),
     State2 = add_writer({From, Data}, State),
@@ -226,8 +235,8 @@ handle_info(Info, State) ->
     lager:info("handle_info: ~p", [Info]),
     noreply(State).
 
-terminate(Reason, #tcp_state{key = Key} = State) ->
-    lager:debug("conn process terminate ~p~n~s", [Reason, pp(State)]),
+terminate(Reason, #tcp_state{key = Key}) ->
+    lager:info("conn process terminate ~p", [Reason]),
     true = ets:delete(?MODULE, Key),
     ok.
 
@@ -316,6 +325,9 @@ update_state_on_flags(#tcp{rst = 1}, #tcp_state{} = State) ->
     lager:debug("closed on rst"),
     set_state(closed, State);
 update_state_on_flags(#tcp{syn = 1, fin = 0},
+                      #tcp_state{state = syn_sent} = State) ->
+    set_state(syn_received, State);
+update_state_on_flags(#tcp{syn = 1, fin = 0},
                       #tcp_state{state = closed} = State) ->
     set_state(syn_received, State);
 update_state_on_flags(#tcp{syn = 0, fin = 1},
@@ -366,8 +378,8 @@ cancel_delack(#tcp_state{delack_timer = TRef} = State) ->
     State#tcp_state{delack_timer = undefined}.
 
 update_receiver(#tcp{syn = 1, seqno = Seq}, <<>>,
-                #tcp_state{rcv_nxt = undefined,
-                           state = syn_received} = State) ->
+                #tcp_state{rcv_nxt = undefined, state = TcpState} = State) ->
+    true = TcpState =:= established orelse TcpState =:= syn_received,
     {true, State#tcp_state{rcv_nxt = Seq + 1}};
 update_receiver(#tcp{seqno = Seq} = Tcp, Data,
                 #tcp_state{rcv_nxt = Seq} = State) ->
@@ -380,11 +392,11 @@ update_receiver(_, _, State) ->
     % drop out of order segment
     {true, State}.
 
-segment_arrival({#tcp{ack = 0, rst = 0, syn = 1, fin = 0} = Tcp, Data},
-                State) when Data =/= <<>> ->
+segment_arrival({#tcp{ack = 0, syn = 1} = Tcp, Data}, State)
+        when Data =/= <<>> ->
     segment_arrival({Tcp, <<>>}, State);  % drop data on syn segment
 segment_arrival({#tcp{ack = Ack, rst = Rst, syn = Syn} = Tcp, Data}, State) when
-        Ack + Syn =:= 1 orelse Rst =:= 1 ->
+        Ack + Syn =/= 0 orelse Rst =:= 1 ->
     {AckNow, State2} = process_input(Tcp, Data, State),
     State3 = deliver_to_app(State2),
     State4 = process_readers(State3),
@@ -437,8 +449,11 @@ tcp_output(AckNow, State) ->
 
 to_send(#tcp_state{state = closed}) ->
     {0, <<>>, 0};
-to_send(#tcp_state{snd_una = Una, snd_nxt = Nxt, state = syn_received})
-        when Una =:= Nxt ->
+to_send(#tcp_state{snd_una = Nxt, snd_nxt = Nxt, state = syn_sent}) ->
+    {1, <<>>, 0};
+to_send(#tcp_state{state = syn_sent}) ->
+    {0, <<>>, 0};
+to_send(#tcp_state{snd_una = Nxt, snd_nxt = Nxt, state = syn_received}) ->
     {1, <<>>, 0};
 to_send(#tcp_state{state = syn_received}) ->
     {0, <<>>, 0};
@@ -511,12 +526,16 @@ build_and_send_packet(Syn, Data, Fin,
                                  template = [Ether, Ip, TcpTmpl],
                                  namespace = NS} = State) ->
     Win = choose_rcv_wnd(State),
+    {Ack, Ackno, Adv} = case RcvNxt of
+        undefined -> {0, 0, undefined};
+        V ->         {1, V, V + Win}
+    end,
     Tcp = TcpTmpl#tcp{
         seqno = SndNxt,
-        ackno = RcvNxt,
+        ackno = Ackno,
         syn = Syn,
         fin = Fin,
-        ack = 1,
+        ack = Ack,
         psh = push(Syn, Data, Fin, State),
         window = Win,
         options = [{mss, RMSS} || Syn =:= 1]
@@ -525,8 +544,7 @@ build_and_send_packet(Syn, Data, Fin,
                 [byte_size(Data), pp(Tcp), pp(State)]),
     Pkt = [Ether, Ip, Tcp, Data],
     aloha_tcp:send_packet(Pkt, NS, Backend),
-    State#tcp_state{snd_nxt = calc_next_seq(Tcp, Data),
-                    rcv_adv = RcvNxt + Win}.
+    State#tcp_state{snd_nxt = calc_next_seq(Tcp, Data), rcv_adv = Adv}.
 
 should_exit(#tcp_state{state = closed, owner = none}) ->
     true;

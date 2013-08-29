@@ -26,7 +26,6 @@ to run cowboy/ranch on aloha.
 TODO
 ----
 
-- active open
 - exit_on_close
 - urg
 - sender sws avoidance

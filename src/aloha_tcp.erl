@@ -26,6 +26,7 @@
 -export([start/0, handle/3]).
 -export([listen/2]).
 -export([send_packet/3]).
+-export([connect/6]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
@@ -81,7 +82,7 @@ new_connection(Tcp, Stack, Key, Opts, Listener) ->
     % create new connection process
     Opts2 = [{template, make_reply_template(Tcp, Stack)},
              {owner, Listener}, {key, Key} | Opts],
-    {ok, NewPid} = gen_server:start(aloha_tcp_conn, Opts2, []),
+    {ok, NewPid} = aloha_tcp_conn:start(Opts2),
     NewPid.
 
 handle_tcp(#tcp{checksum=good} = Tcp, Stack, Data, Opts) ->
@@ -135,6 +136,42 @@ flag(1, C) ->
     C;
 flag(0, _) ->
     ".".
+
+connect(NS, RAddr0, RPort, L1Src, Backend, Opts) ->
+    RAddr = aloha_addr:to_bin(RAddr0),
+    LAddr = aloha_addr:to_bin(proplists:get_value(ip, Opts)),
+    LPort = proplists:get_value(port, Opts, choose_port()),
+    Mtu = proplists:get_value(mtu, Opts, 1500),
+    Proto = case byte_size(LAddr) of
+        16 -> ipv6;
+        4 -> ip
+    end,
+    Key = {NS, {RAddr, LAddr, RPort, LPort}},
+    Opts2 = [{owner, self()},
+             {addr, L1Src},
+             {mtu, Mtu},
+             {Proto, LAddr},
+             {backend, Backend},
+             {key, Key},
+             {template,
+                 make_template(Proto, RAddr, RPort, LAddr, LPort, L1Src)},
+             {namespace, NS}],
+    {ok, Pid} = aloha_tcp_conn:start(Opts2),
+    ok = gen_server:call(Pid, connect),
+    {ok, {aloha_socket, Pid}}.
+
+make_template(Proto, Dst, DstPort, Src, SrcPort, L1Src) ->
+    [#ether{dst = <<0,0,0,0,0,0>>, src = L1Src, type = Proto},
+     make_l2_template(Proto, Dst, Src),
+     #tcp{src_port = SrcPort, dst_port = DstPort}].
+
+make_l2_template(ip, Dst, Src) ->
+    #ip{dst = Dst, src = Src, protocol = tcp};
+make_l2_template(ipv6, Dst, Src) ->
+    #ipv6{dst = Dst, src = Src, next_header = tcp}.
+
+choose_port() ->
+    crypto:rand_uniform(1000, 65000).  % XXX
 
 tcp_summary(#tcp{dst_port = Dst, src_port = Src, syn = Syn, ack = Ack,
                  rst = Rst, psh = Psh, fin = Fin, window = Win,
