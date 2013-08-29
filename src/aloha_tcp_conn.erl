@@ -327,7 +327,7 @@ update_state_on_flags(#tcp{syn = 1, fin = 0},
     set_state(syn_received, State);
 update_state_on_flags(#tcp{syn = 1, fin = 0},
                       #tcp_state{state = closed} = State) ->
-    set_state(syn_received, State);
+    set_state(syn_received, State#tcp_state{snd_syn = 1});
 update_state_on_flags(#tcp{syn = 0, fin = 1},
                       #tcp_state{state = established} = State) ->
     State2 = set_state(close_wait, State),
