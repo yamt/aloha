@@ -26,21 +26,19 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
-self_connect_test() ->
+tcp_self_connect_test_common(Proto, IPAddr) ->
     {ok, Pid} = aloha_neighbor:start_link(),
     aloha_tcp:init_tables(),
     HwAddr = <<16#0003478ca1b3:48>>,  % taken from my unused machine
-    IPAddr = <<127,0,0,1>>,
     {ok, Nic} = aloha_nic_loopback:create(?MODULE, HwAddr),
-    ok = gen_server:call(Nic, {setopts, [{ip, IPAddr}]}),
+    ok = gen_server:call(Nic, {setopts, [{Proto, IPAddr}]}),
     {ok, Opts} = gen_server:call(Nic, getopts),
     Addr = proplists:get_value(addr, Opts),
     Mtu = proplists:get_value(mtu, Opts),
-    Ip = proplists:get_value(ip, Opts),
     Backend = proplists:get_value(backend, Opts),
     {ok, Sock} = aloha_tcp:connect(?MODULE, IPAddr, 7777, Addr,
                                    Backend,
-                                   [{ip, Ip}, {port, 7777}, {mtu, Mtu}]),
+                                   [{ip, IPAddr}, {port, 7777}, {mtu, Mtu}]),
     Msg = <<"hello!">>,
     aloha_socket:send(Sock, Msg),
     {ok, Msg} = aloha_socket:recv(Sock, 0),
@@ -50,4 +48,18 @@ self_connect_test() ->
     {aloha_socket, SockPid} = Sock,
     exit(SockPid, kill),
     unlink(Pid),
-    exit(Pid, kill).
+    exit(Pid, kill),
+    exit(Nic, kill),
+    lists:foreach(fun(P) ->
+        monitor(process, P),
+        receive
+            {'DOWN', _, process, P, _} -> ok
+        end
+    end, [Pid, Nic, SockPid]),
+    aloha_tcp:fini_tables().
+
+tcp_ipv4_self_connect_test() ->
+    tcp_self_connect_test_common(ip, <<127,0,0,1>>).
+
+tcp_ipv6_self_connect_test() ->
+    tcp_self_connect_test_common(ipv6, <<0:128>>).
