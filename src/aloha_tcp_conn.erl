@@ -160,13 +160,13 @@ handle_call(peername, _From, #tcp_state{template = Tmpl} = State) ->
         [_, #ip{dst = A}, #tcp{dst_port = P}] -> {A, P};
         [_, #ipv6{dst = A}, #tcp{dst_port = P}] -> {A, P}
     end,
-    reply({ok, {aloha_utils:bytes_to_ip(Addr), Port}}, State);
+    reply({ok, {aloha_addr:to_ip(Addr), Port}}, State);
 handle_call(sockname, _From, #tcp_state{template = Tmpl} = State) ->
     {Addr, Port} = case Tmpl of
         [_, #ip{src = A}, #tcp{src_port = P}] -> {A, P};
         [_, #ipv6{src = A}, #tcp{src_port = P}] -> {A, P}
     end,
-    reply({ok, {aloha_utils:bytes_to_ip(Addr), Port}}, State);
+    reply({ok, {aloha_addr:to_ip(Addr), Port}}, State);
 handle_call({controlling_process, NewOwner}, _From,
             #tcp_state{owner = OldOwner} = State) ->
     true = State#tcp_state.suppress,  % assert.  see controlling_process/1
