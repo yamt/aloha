@@ -753,6 +753,7 @@ shutdown_sender(State) ->
 close(State) ->
     State2 = shutdown_receiver(State),
     State3 = shutdown_sender(State2),
+    unlink(State3#tcp_state.owner),
     State3#tcp_state{owner = none}.
 
 %% setopt
