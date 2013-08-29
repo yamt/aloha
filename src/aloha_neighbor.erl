@@ -59,7 +59,8 @@ handle_info(Info, State) ->
     lager:info("handle_info: ~p", [Info]),
     {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(Reason, _State) ->
+    lager:info("aloha_neighbor terminate for ~p", [Reason]),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
@@ -85,6 +86,7 @@ send_or_acc({[#ether{dst = <<0,0,0,0,0,0>>}, L2|_] = Pkt, NS, Backend} = Req,
     Key = key(L2, NS),
     case catch lookup(Key) of
         {'EXIT', _} ->
+            lager:debug("neighbor not found for key ~p", [Key]),
             [Req|Acc];
         LLAddr ->
             send_packet_to(Pkt, LLAddr, Backend),
@@ -97,10 +99,13 @@ send_or_acc({Pkt, _NS, Backend}, Acc) ->
 lookup(Key) ->
     ets:lookup_element(?MODULE, Key, 2).
 
-send_packet_to([Ether|Rest], LLAddr, Backend) ->
+send_packet_to([Ether|Rest] = Pkt, LLAddr, Backend) ->
+    lager:debug("neighbor send to ~p ~p",
+               [LLAddr, aloha_utils:pr(Pkt, ?MODULE)]),
     aloha_nic:send_packet([Ether#ether{dst = LLAddr}|Rest], Backend).
 
 notify(Key, Value) ->
+    lager:debug("neighbor key ~p value ~p", [Key, Value]),
     gen_server:cast(?MODULE, {resolved, Key, Value}).
 
 discover_module(ip) -> aloha_arp;
@@ -117,5 +122,5 @@ send_discover([#ether{src = L1Src}, L2|_], Backend) ->
     {Protocol, Dst, Src} = extract_l2(L2),
     Mod = discover_module(Protocol),
     Pkt = Mod:discovery_packet(Dst, Src, L1Src),
-    lager:info("discovery pkt ~p", [aloha_utils:pr(Pkt, ?MODULE)]),
+    lager:debug("discovery pkt ~p", [aloha_utils:pr(Pkt, ?MODULE)]),
     aloha_nic:send_packet(Pkt, Backend).
