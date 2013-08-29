@@ -38,7 +38,7 @@ create(NS, Addr) ->
                                   {backend, {?MODULE, loopback, [Key]}}],
                                  []),
     lager:info("loopback nic ~p created", [Pid]),
-    Pid.
+    {ok, Pid}.
 
 %% internal
 
