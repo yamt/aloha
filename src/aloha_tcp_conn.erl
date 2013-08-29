@@ -46,6 +46,7 @@
                     rcv_mss,
                     backend, template,
                     state, owner, active = false, suppress = false,
+                    active_open = false,
                     pending_ctl = [],
                     key,
                     writers = [], reader = none,
@@ -128,7 +129,7 @@ noreply(false, false, State) ->
 handle_call(connect, _From, #tcp_state{state = closed} = State) ->
     State2 = set_state(syn_sent, State),
     State3 = tcp_output(State2),
-    reply(ok, State3);
+    reply(ok, State3#tcp_state{active_open = true});
 handle_call({send, Data}, From, State) ->
     lager:info("TCP user write datalen ~p", [byte_size(Data)]),
     State2 = add_writer({From, Data}, State),
@@ -291,8 +292,11 @@ una_syn(#tcp_state{state = syn_received}) -> 1;
 una_syn(#tcp_state{state = syn_sent}) -> 1;
 una_syn(_) -> 0.
 
+established(#tcp_state{active_open = true} = State) ->
+    set_state(established, State);
 established(#tcp_state{owner = Owner} = State) ->
     lager:info("connected ~p owner ~p", [self(), Owner]),
+    % notify the listener socket process
     ok = gen_server:cast(Owner, {tcp_connected, self_socket()}),
     set_state(established, State).
 
