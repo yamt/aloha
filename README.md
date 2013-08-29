@@ -26,6 +26,7 @@ to run cowboy/ranch on aloha.
 TODO
 ----
 
+- connect timeout
 - exit_on_close
 - urg
 - sender sws avoidance
