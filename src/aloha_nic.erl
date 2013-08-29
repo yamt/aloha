@@ -41,6 +41,9 @@ init(Opts) ->
 
 handle_call(getopts, _From, #state{opts = Opts} = State) ->
     {reply, {ok, Opts}, State};
+handle_call({setopts, Opts}, _From, #state{opts = OldOpts} = State) ->
+    NewOpts = aloha_utils:merge_opts(Opts, OldOpts),
+    {reply, ok, State#state{opts = NewOpts}};
 handle_call(Req, _From, State) ->
     lager:info("unknown call ~p", [Req]),
     {noreply, State}.
@@ -56,9 +59,6 @@ handle_cast({send_packet, Pkt}, #state{opts = Opts} = State) ->
     Backend = proplists:get_value(backend, Opts),
     send_packet(Pkt, Backend),
     {noreply, State};
-handle_cast({setopts, Opts}, #state{opts = L}=State) ->
-    L2 = aloha_utils:merge_opts(L, Opts),
-    {noreply, State#state{opts=L2}};
 handle_cast(M, State) ->
     lager:info("unknown msg ~p", [M]),
     {noreply, State}.
