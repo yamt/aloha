@@ -39,7 +39,10 @@ init(Opts) ->
     true = ets:insert_new(?MODULE, {Key, self()}),
     {ok, #state{opts=Opts}}.
 
-handle_call(_Req, _From, State) ->
+handle_call(getopts, _From, #state{opts = Opts} = State) ->
+    {reply, {ok, Opts}, State};
+handle_call(Req, _From, State) ->
+    lager:info("unknown call ~p", [Req]),
     {noreply, State}.
 
 handle_cast({packet, Pkt}, State) ->
