@@ -611,10 +611,14 @@ deliver_to_app(#tcp_state{rcv_buf = <<>>, owner = Pid,
 deliver_to_app(#tcp_state{rcv_buf = <<>>} = State) ->
     State;
 deliver_to_app(#tcp_state{rcv_buf = RcvBuf, owner = Pid,
-                          active = once} = State) ->
+                          active = Mode} = State) ->
     % mimic inet {deliver, term}
     Pid ! {tcp, self_socket(), RcvBuf},
-    deliver_to_app(State#tcp_state{rcv_buf = <<>>, active = false}).
+    NextMode = case Mode of
+        once -> false;
+        true -> true
+    end,
+    deliver_to_app(State#tcp_state{rcv_buf = <<>>, active = NextMode}).
 
 deliver_to_app(Msg, #tcp_state{pending_ctl = Q} = State) ->
     State#tcp_state{pending_ctl = Q ++ [Msg]}.
