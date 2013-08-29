@@ -25,6 +25,7 @@
 -module(aloha_ipv6).
 -export([handle/3]).
 -export([solicited_node_multicast/1]).
+-export([multicast_ether/1]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
@@ -45,3 +46,8 @@ handle_ipv6(Ip, _Next, _Rest, _IpAddr, _Mcast, _Stack) ->
 solicited_node_multicast(Addr) ->
     <<_:104, Tail:24>> = Addr,
     <<16#ff02:16, 0:16, 0:16, 0:16, 0:16, 1:16, 16#ff:8, Tail:24>>.
+
+% RFC 2424 7.
+multicast_ether(<<_:(12*8), A, B, C, D>>) ->
+    <<16#33, 16#33, A, B, C, D>>.
+

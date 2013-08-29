@@ -75,9 +75,10 @@ handle_icmpv6(Icmp, _Stack, _Addr, _Opts) ->
     ok.
 
 discovery_packet(Target, OurAddr, OurLLAddr) ->
-    [#ether{dst = <<33,33,33,0,0,0>>, src = OurLLAddr, type = ipv6},
-     #ipv6{next_header = icmpv6, src = OurAddr,
-           dst = aloha_ipv6:solicited_node_multicast(Target)},
+    Dst = aloha_ipv6:solicited_node_multicast(Target),
+    [#ether{dst = aloha_ipv6:multicast_ether(Dst),
+            src = OurLLAddr, type = ipv6},
+     #ipv6{next_header = icmpv6, src = OurAddr, dst = Dst},
      #icmpv6{type = neighbor_solicitation,
              data = #neighbor_solicitation{
                 target_address = Target,
