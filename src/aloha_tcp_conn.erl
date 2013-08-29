@@ -47,7 +47,8 @@
                     state, owner, active = false, suppress = false,
                     pending_ctl = [],
                     key,
-                    writers = [], reader = none}).
+                    writers = [], reader = none,
+                    namespace}).
 
 -define(MSL, (30 * 1000)).
 
@@ -80,6 +81,7 @@ init(Opts) ->
     MTU = proplists:get_value(mtu, Opts, 1500),
     MSS = MTU - 20 - 20,
     Owner = proplists:get_value(owner, Opts),
+    NS = proplists:get_value(namespace, Opts),
     State = #tcp_state{backend = Backend,
                        template = proplists:get_value(template, Opts),
                        snd_nxt = 0,  % ISS
@@ -91,7 +93,8 @@ init(Opts) ->
                        rcv_mss = MSS,
                        state = closed,
                        owner = Owner,
-                       key = Key},
+                       key = Key,
+                       namespace = NS},
     true = ets:insert_new(?MODULE, {Key, self()}),
     link(Owner),
     lager:debug("init ~s", [pp(State)]),
@@ -505,7 +508,8 @@ build_and_send_packet(Syn, Data, Fin,
                                  rcv_nxt = RcvNxt,
                                  backend = Backend,
                                  rcv_mss = RMSS,
-                                 template = [Ether, Ip, TcpTmpl]} = State) ->
+                                 template = [Ether, Ip, TcpTmpl],
+                                 namespace = NS} = State) ->
     Win = choose_rcv_wnd(State),
     Tcp = TcpTmpl#tcp{
         seqno = SndNxt,
@@ -520,7 +524,7 @@ build_and_send_packet(Syn, Data, Fin,
     lager:debug("TCP send datalen ~p~n~s~n~s",
                 [byte_size(Data), pp(Tcp), pp(State)]),
     Pkt = [Ether, Ip, Tcp, Data],
-    aloha_tcp:send_packet(Pkt, Backend),
+    aloha_tcp:send_packet(Pkt, NS, Backend),
     State#tcp_state{snd_nxt = calc_next_seq(Tcp, Data),
                     rcv_adv = RcvNxt + Win}.
 

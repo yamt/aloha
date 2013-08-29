@@ -65,10 +65,11 @@ handle_icmpv6(#icmpv6{type = neighbor_advertisement,
                       data = #neighbor_advertisement{
                           target_address = TargetAddress,
                           options = Options}},
-              _Stack, _Addr, _Opts) ->
+              _Stack, _Addr, Opts) ->
     LLAddr = proplists:get_value(target_link_layer_address, Options),
     lager:info("icmpv6 neighbor adv ~w has ~w", [LLAddr, TargetAddress]),
-    aloha_neighbor:notify(ipv6, TargetAddress, LLAddr);
+    NS = proplists:get_value(namespace, Opts),
+    aloha_neighbor:notify({NS, ipv6, TargetAddress}, LLAddr);
 handle_icmpv6(Icmp, _Stack, _Addr, _Opts) ->
     lager:info("icmpv6 unhandled ~p", [aloha_utils:pr(Icmp, ?MODULE)]),
     ok.

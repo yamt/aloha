@@ -26,8 +26,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 -export([start_link/0]).
--export([send_packet/2]).
--export([notify/3]).
+-export([send_packet/3]).
+-export([notify/2]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
@@ -50,8 +50,8 @@ handle_cast({resolve, Req}, State) ->
     State2 = add_request(Req, State),
     State3 = process_requests(State2),
     {noreply, State3};
-handle_cast({resolved, L2, L1}, State) ->
-    ets:insert(?MODULE, {L2, L1}),
+handle_cast({resolved, Key, Value}, State) ->
+    ets:insert(?MODULE, {Key, Value}),
     State2 = process_requests(State),
     {noreply, State2}.
 
@@ -72,42 +72,43 @@ process_requests(#state{q = Q} = State) ->
     Q2 = lists:foldl(fun send_or_acc/2, [], Q),
     State#state{q = Q2}.
 
-send_packet(Pkt, Backend) ->
-    List = send_or_acc({Pkt, Backend}, []),
+send_packet(Pkt, NS, Backend) ->
+    List = send_or_acc({Pkt, NS, Backend}, []),
     lists:foreach(fun(X) ->
-        {Pkt, Backend} = X,
+        {Pkt, _NS, Backend} = X,
         send_discover(Pkt, Backend),
         gen_server:cast(?MODULE, {resolve, X}) end,
     List).
 
-send_or_acc({[#ether{dst = <<0,0,0,0,0,0>>}, L2|_] = Pkt, Backend} = Req,
+send_or_acc({[#ether{dst = <<0,0,0,0,0,0>>}, L2|_] = Pkt, NS, Backend} = Req,
             Acc) ->
-    case catch lookup(L2) of
+    Key = key(L2, NS),
+    case catch lookup(Key) of
         {'EXIT', _} ->
             [Req|Acc];
         LLAddr ->
             send_packet_to(Pkt, LLAddr, Backend),
             Acc
     end;
-send_or_acc({Pkt, Backend}, Acc) ->
+send_or_acc({Pkt, _NS, Backend}, Acc) ->
     aloha_nic:send_packet(Pkt, Backend),
     Acc.
 
-lookup(L2) ->
-    ets:lookup_element(?MODULE, key(L2), 2).
+lookup(Key) ->
+    ets:lookup_element(?MODULE, Key, 2).
 
 send_packet_to([Ether|Rest], LLAddr, Backend) ->
     aloha_nic:send_packet([Ether#ether{dst = LLAddr}|Rest], Backend).
 
-notify(Protocol, L2, L1) ->
-    gen_server:cast(?MODULE, {resolved, {Protocol, L2}, L1}).
+notify(Key, Value) ->
+    gen_server:cast(?MODULE, {resolved, Key, Value}).
 
 discover_module(ip) -> aloha_arp;
 discover_module(ipv6) -> aloha_icmpv6.
 
-key(L2) ->
+key(L2, NS) ->
     {Proto, Dst, _Src} = extract_l2(L2),
-    {Proto, Dst}.
+    {NS, Proto, Dst}.
 
 extract_l2(#ip{dst = Dst, src = Src}) -> {ip, Dst, Src};
 extract_l2(#ipv6{dst = Dst, src = Src}) -> {ipv6, Dst, Src}.

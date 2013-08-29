@@ -40,9 +40,10 @@ handle_arp(#arp{op = request, sha = Sha, spa = Spa, tpa = Addr} = Arp, Addr,
     Rep = [#ether{dst = Sha, src = LLAddr, type = arp},
            Arp#arp{op = reply, tpa = Spa, tha = Sha, spa = Addr, sha = LLAddr}],
     aloha_nic:send_packet(Rep);
-handle_arp(#arp{op = reply, sha = Sha, spa = Spa}, _Addr, _Opts) ->
+handle_arp(#arp{op = reply, sha = Sha, spa = Spa}, _Addr, Opts) ->
     lager:info("arp reply ~w has ~w", [Sha, Spa]),
-    aloha_neighbor:notify(ip, Spa, Sha);
+    NS = proplists:get_value(namespace, Opts),
+    aloha_neighbor:notify({NS, ip, Spa}, Sha);
 handle_arp(#arp{}, _Addr, _Opts) ->
     ok.
 

@@ -25,7 +25,7 @@
 -module(aloha_tcp).
 -export([start/0, handle/3]).
 -export([listen/2]).
--export([send_packet/2]).
+-export([send_packet/3]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
@@ -101,7 +101,7 @@ handle_tcp(#tcp{checksum=good} = Tcp, Stack, Data, Opts) ->
     end,
     case Pid of
         none ->
-            reply_rst(Tcp, Stack, Data, proplists:get_value(backend, Opts));
+            reply_rst(Tcp, Stack, Data, Opts);
         _ ->
             gen_server:cast(Pid, {Tcp, Data})
     end;
@@ -117,17 +117,19 @@ make_rst(Rep, Tcp, _Data) ->
 
 reply_rst(#tcp{rst = 1}, _, _, _) ->
     ok;
-reply_rst(Tcp, Stack, Data, Backend) ->
+reply_rst(Tcp, Stack, Data, Opts) ->
+    Backend = proplists:get_value(backend, Opts),
+    NS = proplists:get_value(namespace, Opts),
     [Ether, Ip, Tcp2] = make_reply_template(Tcp, Stack),
     Tcp3 = make_rst(Tcp2, Tcp, Data),
-    aloha_neighbor:send_packet([Ether, Ip, Tcp3, <<>>], Backend).
+    aloha_neighbor:send_packet([Ether, Ip, Tcp3, <<>>], NS, Backend).
 
-send_packet(Pkt, Backend) ->
+send_packet(Pkt, NS, Backend) ->
     [_, _, Tcp, Data] = Pkt,
     lager:info("SEND ~s", [tcp_summary(Tcp, Data)]),
 %   [aloha_neighbor:send_packet(Pkt, Backend) ||
 %    random:uniform() > 0.5],  % drop packets for testing
-    aloha_neighbor:send_packet(Pkt, Backend).
+    aloha_neighbor:send_packet(Pkt, NS, Backend).
 
 flag(1, C) ->
     C;
