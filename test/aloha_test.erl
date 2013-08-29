@@ -41,7 +41,8 @@ tcp_self_connect_test_common(Proto, IPAddr) ->
                                    [{ip, IPAddr}, {port, 7777}, {mtu, Mtu}]),
     Msg = <<"hello!">>,
     aloha_socket:send(Sock, Msg),
-    {ok, Msg} = aloha_socket:recv(Sock, 0),
+    aloha_socket:shutdown(Sock, write),
+    {ok, Msg} = aloha_socket:recv(Sock, byte_size(Msg)),
     aloha_socket:close(Sock),
     lager:info("cleaning up ..."),
     % don't bother to wait for 2MSL
