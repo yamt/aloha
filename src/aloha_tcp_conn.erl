@@ -39,7 +39,8 @@
 -record(tcp_state, {snd_una, snd_nxt, snd_wnd,
                     snd_buf, snd_buf_size,
                     snd_mss,
-                    fin = 0, rexmit_timer, delack_timer,
+                    snd_syn = 0,
+                    snd_fin = 0, rexmit_timer, delack_timer,
                     rcv_nxt,
                     rcv_adv,  % the right edge of advertised window
                     rcv_buf, rcv_buf_size,
@@ -127,9 +128,10 @@ noreply(false, false, State) ->
     {noreply, State}.
 
 handle_call(connect, _From, #tcp_state{state = closed} = State) ->
-    State2 = set_state(syn_sent, State),
-    State3 = tcp_output(State2),
-    reply(ok, State3#tcp_state{active_open = true});
+    State2 = State#tcp_state{snd_syn = 1, active_open = true},
+    State3 = set_state(syn_sent, State2),
+    State4 = tcp_output(State3),
+    reply(ok, State4);
 handle_call({send, Data}, From, State) ->
     lager:info("TCP user write datalen ~p", [byte_size(Data)]),
     State2 = add_writer({From, Data}, State),
@@ -263,13 +265,14 @@ calc_next_seq(#tcp{seqno = Seq} = Tcp, Data) ->
 % SND.UNA < SEG.ACK =< SND.NXT
 process_ack(#tcp{ack = 1, ackno = Ack},
             #tcp_state{snd_una = Una, snd_nxt = Nxt,
-                       snd_buf = SndBuf, fin = Fin} = State) when
+                       snd_syn = Syn, snd_buf = SndBuf,
+                       snd_fin = Fin} = State) when
             ?SEQ_LT(Una, Ack) andalso ?SEQ_LTE(Ack, Nxt) ->
     lager:info("TCP ACKed ~p-~p", [Una, Ack]),
-    Syn = una_syn(State),
     {Syn2, SndBuf2, Fin2, Ack} = aloha_tcp_seq:trim(Syn, SndBuf, Fin, Una, Ack),
     State2 = update_state_on_ack(Syn2 =/= Syn, Fin2 =/= Fin, State),
-    State3 = State2#tcp_state{snd_una = Ack, snd_buf = SndBuf2, fin = Fin2},
+    State3 = State2#tcp_state{snd_una = Ack, snd_syn = Syn2, snd_buf = SndBuf2,
+                              snd_fin = Fin2},
     process_writers(State3);
 process_ack(#tcp{ack = 0}, State) ->
     State;  % rst, (retransmitted) syn
@@ -302,9 +305,7 @@ established(#tcp_state{owner = Owner} = State) ->
 
 set_state(New, State) ->
     lager:info("TCP ~p State ~p -> ~p", [self(), State#tcp_state.state, New]),
-    State2 = State#tcp_state{state = New},
-    State3 = process_readers(State2),
-    process_writers(State3).
+    State#tcp_state{state = New}.
 
 % incoming ack
 update_state_on_ack(true, _, #tcp_state{state = syn_received} = State) ->
@@ -387,6 +388,7 @@ update_receiver(#tcp{syn = 1, seqno = Seq}, <<>>,
     {true, State#tcp_state{rcv_nxt = Seq + 1}};
 update_receiver(#tcp{seqno = Seq} = Tcp, Data,
                 #tcp_state{rcv_nxt = Seq} = State) ->
+    lager:info("appending ~p bytes to rcv_buf ~p", [byte_size(Data), Data]),
     RcvBuf = <<(State#tcp_state.rcv_buf)/bytes, Data/bytes>>,
     Nxt = calc_next_seq(Tcp, Data),
     {AckNow, State2} = setup_ack(Nxt, State),
@@ -417,10 +419,10 @@ next_state_on_close(close_wait) -> last_ack;
 next_state_on_close(Other) -> Other.
 
 % enqueue fin except the case of syn_sent -> closed
-enqueue_fin(closed, State) ->
+enqueue_fin(#tcp_state{state = closed} = State) ->
     State;
-enqueue_fin(_, State) ->
-    State#tcp_state{fin = 1}.
+enqueue_fin(State) ->
+    State#tcp_state{snd_fin = 1}.
 
 rcv_buf_space(#tcp_state{rcv_buf_size = BufSize, rcv_buf = Buf}) ->
     max(0, BufSize - byte_size(Buf)).
@@ -461,8 +463,9 @@ to_send(#tcp_state{snd_una = Nxt, snd_nxt = Nxt, state = syn_received}) ->
     {1, <<>>, 0};
 to_send(#tcp_state{state = syn_received}) ->
     {0, <<>>, 0};
-to_send(#tcp_state{snd_una = Una, snd_nxt = Nxt, fin = Fin, snd_buf = Buf}) ->
-    {S, D, F, _} = aloha_tcp_seq:trim(0, Buf, Fin, Una, Nxt),
+to_send(#tcp_state{snd_una = Una, snd_nxt = Nxt, snd_syn = Syn, snd_fin = Fin,
+        snd_buf = Buf}) ->
+    {S, D, F, _} = aloha_tcp_seq:trim(Syn, Buf, Fin, Una, Nxt),
     {S, D, F}.
 
 tcp_output(CanProbe,
@@ -655,6 +658,10 @@ append_data(SndBuf, SndBufSize, Data) ->
     <<ToAdd:Left/bytes, Rest/bytes>> = Data,
     {<<SndBuf/bytes, ToAdd/bytes>>, Rest}.
 
+process_users(State) ->
+    State2 = process_readers(State),
+    process_writers(State2).
+
 %% send
 
 add_writer(Writer, #tcp_state{writers = Writers} = State) ->
@@ -692,19 +699,26 @@ process_writers(#tcp_state{snd_buf = SndBuf,
 
 process_readers(#tcp_state{reader = none} = State) ->
     State;
-process_readers(#tcp_state{reader = {_, From, _, _},
+process_readers(#tcp_state{rcv_buf = <<>>,
+                           reader = {TRef, From, _, Data},
                            state = TcpState} = State) when
        TcpState =:= close_wait orelse TcpState =:= last_ack orelse
        TcpState =:= closing orelse TcpState =:= time_wait orelse
        TcpState =:= closed ->
-    lager:info("TCP user read result closed"),
-    gen_server:reply(From, {error, closed}),
+    case Data of
+        <<>> ->
+            lager:info("TCP user read result closed"),
+            lager:debug("closed ~p", [aloha_utils:pr(State, ?MODULE)]),
+            gen_server:reply(From, {error, closed});
+        Partial ->
+            reply_data(TRef, From, Partial)
+    end,
     State2 = State#tcp_state{reader = none},
     process_readers(State2);
 process_readers(#tcp_state{rcv_buf = <<>>} = State) ->
     State;
 process_readers(#tcp_state{reader = {TRef, From, 0, Data},
-                           rcv_buf = RcvBuf} = State) when RcvBuf =/= <<>> ->
+                           rcv_buf = RcvBuf} = State) ->
     Data = <<>>,
     reply_data(TRef, From, RcvBuf),
     State2 = State#tcp_state{rcv_buf = <<>>, reader = none},
@@ -749,8 +763,9 @@ shutdown_receiver(State) ->
 
 shutdown_sender(State) ->
     State2 = update_state_on_close(State),
-    State3 = enqueue_fin(State2#tcp_state.state, State2),
-    tcp_output(State3).
+    State3 = process_users(State2),
+    State4 = enqueue_fin(State3),
+    tcp_output(State4).
 
 %% close
 
