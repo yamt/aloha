@@ -60,14 +60,14 @@ handle_call(accept, From, State) ->
     State2 = add_waiter(From, State),
     {noreply, State2}.
 
-handle_cast({tcp_connected, {aloha_socket, Sock}}, State) ->
-    lager:info("ready to accept ~p", [Sock]),
-    State2 = add_socket(Sock, State),
-    {noreply, process_accept(State2)};
 handle_cast(M, State) ->
     lager:info("unknown msg ~p", [M]),
     {noreply, State}.
 
+handle_info({aloha_tcp_connected, {aloha_socket, Sock}}, State) ->
+    lager:info("ready to accept ~p", [Sock]),
+    State2 = add_socket(Sock, State),
+    {noreply, process_accept(State2)};
 handle_info(Info, State) ->
     lager:info("handle_info: ~p", [Info]),
     {noreply, State}.

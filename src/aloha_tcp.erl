@@ -166,7 +166,14 @@ connect(NS, RAddr0, RPort, L1Src, Backend, Opts) ->
              {namespace, NS}],
     {ok, Pid} = aloha_tcp_conn:start(Opts2),
     ok = gen_server:call(Pid, connect),
-    {ok, {aloha_socket, Pid}}.
+    Sock = {aloha_socket, Pid},
+    connect_wait(Sock),
+    {ok, Sock}.
+
+connect_wait(Sock) ->
+    receive
+        {aloha_tcp_connected, Sock} -> ok
+    end.
 
 make_template(Proto, Dst, DstPort, Src, SrcPort, L1Src) ->
     [#ether{dst = <<0,0,0,0,0,0>>, src = L1Src, type = Proto},
