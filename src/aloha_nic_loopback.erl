@@ -23,11 +23,12 @@
 % SUCH DAMAGE.
 
 -module(aloha_nic_loopback).
--export([create/3]).
+-export([create/2]).
 -export([loopback/2]).
 
 % a convenient routine to create loopback interface.
-create(NS, Id, Addr) ->
+create(NS, Addr) ->
+    Id = make_ref(),
     Key = {?MODULE, Id},
     {ok, Pid} = gen_server:start(aloha_nic,
                                  [{namespace, NS},
