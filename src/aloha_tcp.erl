@@ -23,14 +23,17 @@
 % SUCH DAMAGE.
 
 -module(aloha_tcp).
--export([start/0, handle/3]).
--export([listen/2]).
+-export([init_tables/0]).
+-export([handle/3]).
 -export([send_packet/3]).
+
+-export([listen/2]).
 -export([connect/6]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
-start() ->
+init_tables() ->
+    ets:new(aloha_nic, [set, named_table, public]),
     ets:new(aloha_tcp_conn, [set, named_table, public]),
     ets:new(aloha_tcp_listener, [set, named_table, public]).
 
