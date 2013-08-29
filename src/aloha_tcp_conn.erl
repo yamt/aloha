@@ -449,16 +449,9 @@ tcp_output(State) ->
 tcp_output(AckNow, State) ->
     tcp_output(false, AckNow, State).
 
-to_send(#tcp_state{state = closed}) ->
-    {0, <<>>, 0};
-to_send(#tcp_state{snd_una = Nxt, snd_nxt = Nxt, state = syn_sent}) ->
-    {1, <<>>, 0};
-to_send(#tcp_state{state = syn_sent}) ->
-    {0, <<>>, 0};
-to_send(#tcp_state{snd_una = Nxt, snd_nxt = Nxt, state = syn_received}) ->
-    {1, <<>>, 0};
-to_send(#tcp_state{state = syn_received}) ->
-    {0, <<>>, 0};
+to_send(#tcp_state{snd_una = Una, snd_nxt = Nxt, snd_syn = 1}) ->
+    {S, D, F, _} = aloha_tcp_seq:trim(1, <<>>, 0, Una, Nxt),
+    {S, D, F};
 to_send(#tcp_state{snd_una = Una, snd_nxt = Nxt, snd_syn = Syn, snd_fin = Fin,
         snd_buf = Buf}) ->
     {S, D, F, _} = aloha_tcp_seq:trim(Syn, Buf, Fin, Una, Nxt),
