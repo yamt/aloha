@@ -291,10 +291,6 @@ update_sender(Tcp, State) ->
     State3 = update_mss(Tcp, State2),
     State3#tcp_state{snd_wnd = Tcp#tcp.window}.
 
-una_syn(#tcp_state{state = syn_received}) -> 1;
-una_syn(#tcp_state{state = syn_sent}) -> 1;
-una_syn(_) -> 0.
-
 established(#tcp_state{active_open = true} = State) ->
     set_state(established, State);
 established(#tcp_state{owner = Owner} = State) ->
