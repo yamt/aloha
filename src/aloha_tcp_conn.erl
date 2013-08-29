@@ -91,11 +91,13 @@ init(Opts) ->
                        template = proplists:get_value(template, Opts),
                        snd_nxt = 0,  % ISS
                        snd_una = 0,  % ISS
-                       snd_buf = <<>>, snd_buf_size = 3000,
+                       snd_buf = <<>>,
+                       snd_buf_size = proplists:get_value(snd_buf, Opts, 3000),
                        snd_mss = MSS,
                        snd_wnd = 1,  % for initial syn
                        rexmit_timer = make_ref(),
-                       rcv_buf = <<>>, rcv_buf_size = 3000,
+                       rcv_buf = <<>>,
+                       rcv_buf_size = proplists:get_value(rcv_buf, Opts, 3000),
                        rcv_mss = MSS,
                        state = closed,
                        owner = Owner,

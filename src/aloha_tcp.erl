@@ -145,6 +145,12 @@ flag(1, C) ->
 flag(0, _) ->
     ".".
 
+lookup_and_acc(Name, Opts, Acc) ->
+    case proplists:lookup(Name, Opts) of
+        false -> Acc;
+        T -> [T|Acc]
+    end.
+
 connect(NS, RAddr0, RPort, L1Src, Backend, Opts) ->
     RAddr = aloha_addr:to_bin(RAddr0),
     LAddr = aloha_addr:to_bin(proplists:get_value(ip, Opts)),
@@ -164,7 +170,9 @@ connect(NS, RAddr0, RPort, L1Src, Backend, Opts) ->
              {template,
                  make_template(Proto, RAddr, RPort, LAddr, LPort, L1Src)},
              {namespace, NS}],
-    {ok, Pid} = aloha_tcp_conn:start(Opts2),
+    Opts3 = lists:foldl(fun(X, Acc) -> lookup_and_acc(X, Opts, Acc) end, Opts2,
+                        [rcv_buf, snd_buf]),
+    {ok, Pid} = aloha_tcp_conn:start(Opts3),
     ok = gen_server:call(Pid, connect),
     Sock = {aloha_socket, Pid},
     connect_wait(Sock),
