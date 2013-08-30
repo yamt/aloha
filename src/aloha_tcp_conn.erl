@@ -61,21 +61,6 @@
 
 -define(DEFAULT_MSS, (576 - 20 - 20)).  % as per RFC 879 and RFC 1122
 
-pp(#tcp_state{snd_buf = SndBuf} = State) when is_binary(SndBuf) ->
-    % XXX hack to make this less verbose
-    pp(State#tcp_state{snd_buf = byte_size(State#tcp_state.snd_buf),
-                       rcv_buf = byte_size(State#tcp_state.rcv_buf),
-                       template = [], backend = []});
-pp(Rec) ->
-    io_lib_pretty:print(Rec, fun pp/2).
-
-pp(tcp_state, _N) ->
-    record_info(fields, tcp_state);
-pp(tcp, _N) ->
-    record_info(fields, tcp);
-pp(_, _) ->
-    no.
-
 start(Opts) ->
     gen_server:start(?MODULE, Opts, []).
 
@@ -105,7 +90,6 @@ init(Opts) ->
                        namespace = NS},
     true = ets:insert_new(?MODULE, {Key, self()}),
     link(Owner),
-    lager:debug("init ~s", [pp(State)]),
     {ok, State}.
 
 reply(Reply, State) ->
@@ -278,7 +262,8 @@ process_ack(#tcp{ack = 1, ackno = Ack},
 process_ack(#tcp{ack = 0}, State) ->
     State;  % rst, (retransmitted) syn
 process_ack(#tcp{ack = 1} = Tcp, State) ->
-    lager:debug("out of range ack~n~s~n~s", [pp(Tcp), pp(State)]),
+    lager:debug("out of range ack~n~p~n~p", [aloha_utils:pr(Tcp, ?MODULE),
+                                             aloha_utils:pr(State, ?MODULE)]),
     State.
 
 update_mss(#tcp{syn = 0}, State) ->
@@ -406,7 +391,8 @@ segment_arrival({#tcp{ack = Ack, rst = Rst, syn = Syn} = Tcp, Data}, State) when
     State5 = tcp_output(AckNow, State4),
     noreply(State5);
 segment_arrival({#tcp{} = Tcp, Data}, State) ->
-    lager:info("TCP unimplemented datalen ~p~n~s", [byte_size(Data), pp(Tcp)]),
+    lager:info("TCP unimplemented datalen ~p~n~s",
+               [byte_size(Data), aloha_utils:pr(Tcp, ?MODULE)]),
     noreply(State).
 
 next_state_on_close(established) -> fin_wait_1;
@@ -537,8 +523,9 @@ build_and_send_packet(Syn, Data, Fin,
         window = Win,
         options = [{mss, RMSS} || Syn =:= 1]
     },
-    lager:debug("TCP send datalen ~p~n~s~n~s",
-                [byte_size(Data), pp(Tcp), pp(State)]),
+    lager:debug("TCP send datalen ~p~n~p~n~p",
+                [byte_size(Data), aloha_utils:pr(Tcp, ?MODULE),
+                 aloha_utils:pr(State, ?MODULE)]),
     Pkt = [Ether, Ip, Tcp, Data],
     aloha_tcp:send_packet(Pkt, NS, Backend),
     State#tcp_state{snd_nxt = calc_next_seq(Tcp, Data), rcv_adv = Adv}.
