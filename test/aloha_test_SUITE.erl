@@ -41,7 +41,7 @@
 -define(SELF_PORT, 7777).
 
 suite() ->
-    [{timetrap, 5000}].
+    [{timetrap, 50000}].
 
 all() ->
     [{group, loopback}].
