@@ -372,7 +372,7 @@ update_receiver(#tcp{syn = 1, seqno = Seq}, <<>>,
     {true, State#tcp_state{rcv_nxt = Seq + 1}};
 update_receiver(#tcp{seqno = Seq} = Tcp, Data,
                 #tcp_state{rcv_nxt = Seq} = State) ->
-    lager:info("appending ~p bytes to rcv_buf ~p", [byte_size(Data), Data]),
+    lager:debug("appending ~p bytes to rcv_buf ~p", [byte_size(Data), Data]),
     RcvBuf = <<(State#tcp_state.rcv_buf)/bytes, Data/bytes>>,
     Nxt = calc_next_seq(Tcp, Data),
     {AckNow, State2} = setup_ack(Nxt, State),
