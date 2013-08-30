@@ -46,7 +46,7 @@ suite() ->
 timetrap() ->
     case os:getenv("TRAVIS") of
         false -> 5000;
-        _ -> 180000
+        _ -> 1800000
     end.
 
 all() ->
