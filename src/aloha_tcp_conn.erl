@@ -249,7 +249,7 @@ calc_next_seq(#tcp{seqno = Seq} = Tcp, Data) ->
 
 % advance SND.UNA and truncate send buffer
 % SND.UNA < SEG.ACK =< SND.NXT
-process_ack(#tcp{ack = 1, ackno = Ack},
+process_ack(#tcp{ack = 1, ackno = Ack, window = Wnd},
             #tcp_state{snd_una = Una, snd_nxt = Nxt,
                        snd_syn = Syn, snd_buf = SndBuf,
                        snd_fin = Fin} = State) when
@@ -258,14 +258,19 @@ process_ack(#tcp{ack = 1, ackno = Ack},
     {Syn2, SndBuf2, Fin2, Ack} = aloha_tcp_seq:trim(Syn, SndBuf, Fin, Una, Ack),
     State2 = update_state_on_ack(Syn2 =/= Syn, Fin2 =/= Fin, State),
     State3 = State2#tcp_state{snd_una = Ack, snd_syn = Syn2, snd_buf = SndBuf2,
-                              snd_fin = Fin2},
+                              snd_fin = Fin2, snd_wnd = Wnd},
     State4 = process_writers(State3),
     tcp_output(State4);
 process_ack(#tcp{ack = 0}, State) ->
     State;  % rst, (retransmitted) syn
-process_ack(#tcp{ackno = Ack} = Tcp, #tcp_state{snd_nxt = Ack} = State) ->
+process_ack(#tcp{ackno = Ack, window = Wnd} = Tcp,
+            #tcp_state{snd_una = Ack, snd_wnd = Wnd} = State) ->
     lager:debug("dup ack ~p ~p", [pp(Tcp), pp(State)]),
     State;
+process_ack(#tcp{ackno = Ack, window = Wnd} = Tcp,
+            #tcp_state{snd_una = Ack} = State) ->
+    lager:debug("pure window update ~p ~p", [pp(Tcp), pp(State)]),
+    State#tcp_state{snd_wnd = Wnd};
 process_ack(Tcp, State) ->
     lager:info("out of range ack ~p ~p", [pp(Tcp), pp(State)]),
     State.
@@ -278,8 +283,7 @@ update_mss(#tcp{options = Options}, #tcp_state{snd_mss = OldMSS} = State) ->
 
 update_sender(Tcp, State) ->
     State2 = process_ack(Tcp, State),
-    State3 = update_mss(Tcp, State2),
-    State3#tcp_state{snd_wnd = Tcp#tcp.window}.
+    update_mss(Tcp, State2).
 
 established(#tcp_state{owner = Owner} = State) ->
     lager:info("connected ~p owner ~p", [self(), Owner]),
@@ -465,7 +469,7 @@ tcp_output(CanProbe,
         true ->
             1;
         false ->
-            min(SndWnd, SMSS)
+            min(max(SndUna + SndWnd - SndNxt, 0), SMSS)
     end,
     {Syn2, Data2, Fin2, SndNxt} =
         aloha_tcp_seq:trim(Syn, Data, Fin, SndNxt, SndNxt, SndNxt + SndWnd2),
