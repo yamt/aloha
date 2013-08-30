@@ -263,9 +263,11 @@ process_ack(#tcp{ack = 1, ackno = Ack},
     tcp_output(State4);
 process_ack(#tcp{ack = 0}, State) ->
     State;  % rst, (retransmitted) syn
-process_ack(#tcp{ack = 1} = Tcp, State) ->
-    lager:debug("out of range ack~n~p~n~p", [aloha_utils:pr(Tcp, ?MODULE),
-                                             aloha_utils:pr(State, ?MODULE)]),
+process_ack(#tcp{ackno = Ack} = Tcp, #tcp_state{snd_nxt = Ack} = State) ->
+    lager:debug("dup ack ~p ~p", [pp(Tcp), pp(State)]),
+    State;
+process_ack(Tcp, State) ->
+    lager:info("out of range ack ~p ~p", [pp(Tcp), pp(State)]),
     State.
 
 update_mss(#tcp{syn = 0}, State) ->
@@ -347,7 +349,8 @@ process_input(#tcp{} = Tcp, Data, State) ->
             State3 = update_state_on_flags(Tcp2, State2),
             update_receiver(Tcp2, Data2, State3);
         false ->
-            % out of window
+            lager:info("drop out of window segment ~p seg_len ~p state ~p",
+                       [pp(Tcp), seg_len(Tcp, Data), pp(State)]),
             {true, State}
     end.
 
@@ -393,8 +396,7 @@ segment_arrival({#tcp{ack = Ack, rst = Rst, syn = Syn} = Tcp, Data}, State) when
     State5 = tcp_output(AckNow, State4),
     noreply(State5);
 segment_arrival({#tcp{} = Tcp, Data}, State) ->
-    lager:info("TCP unimplemented datalen ~p~n~s",
-               [byte_size(Data), aloha_utils:pr(Tcp, ?MODULE)]),
+    lager:info("TCP unimplemented datalen ~p~n~s", [byte_size(Data), pp(Tcp)]),
     noreply(State).
 
 next_state_on_close(established) -> fin_wait_1;
@@ -526,8 +528,7 @@ build_and_send_packet(Syn, Data, Fin,
         options = [{mss, RMSS} || Syn =:= 1]
     },
     lager:debug("TCP send datalen ~p~n~p~n~p",
-                [byte_size(Data), aloha_utils:pr(Tcp, ?MODULE),
-                 aloha_utils:pr(State, ?MODULE)]),
+                [byte_size(Data), pp(Tcp), pp(State)]),
     Pkt = [Ether, Ip, Tcp, Data],
     aloha_tcp:send_packet(Pkt, NS, Backend),
     State#tcp_state{snd_nxt = calc_next_seq(Tcp, Data), rcv_adv = Adv}.
@@ -686,7 +687,7 @@ process_readers(#tcp_state{rcv_buf = <<>>,
     case Data of
         <<>> ->
             lager:info("TCP user read result closed"),
-            lager:debug("closed ~p", [aloha_utils:pr(State, ?MODULE)]),
+            lager:debug("closed ~p", [pp(State)]),
             gen_server:reply(From, {error, closed});
         Partial ->
             reply_data(TRef, From, Partial)
@@ -776,3 +777,14 @@ setopts([H|Rest], State, Orig) ->
 
 setopts(Opts, State) ->
     setopts(Opts, State, State).
+
+%% misc
+
+pp(#tcp_state{rcv_buf = RcvBuf, snd_buf = SndBuf,
+              writers = Writers, reader = Reader} = State) ->
+    aloha_utils:pr(State#tcp_state{rcv_buf = byte_size(RcvBuf),
+                                   snd_buf = byte_size(SndBuf),
+                                   writers = length(Writers),
+                                   reader = Reader =/= none}, ?MODULE);
+pp(X) ->
+    aloha_utils:pr(X, ?MODULE).
