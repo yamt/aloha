@@ -51,12 +51,12 @@ end_per_group(loopback, Config) ->
     kill_and_wait(Pid).
 
 tcp_ipv4_self_connect_test(Config) ->
-    tcp_self_connect_test_common(ip, <<127,0,0,1>>, Config).
+    tcp_self_connect_test_common(ip, <<127,0,0,1>>, 7777, Config).
 
 tcp_ipv6_self_connect_test(Config) ->
-    tcp_self_connect_test_common(ipv6, <<0:128>>, Config).
+    tcp_self_connect_test_common(ipv6, <<0:128>>, 7777, Config).
 
-tcp_self_connect_test_common(Proto, IPAddr, Config) ->
+tcp_self_connect_test_common(Proto, IPAddr, Port, Config) ->
     Nic = ?config(loopback, Config),
     ok = gen_server:call(Nic, {setopts, [{Proto, IPAddr}]}),
     {ok, Opts} = gen_server:call(Nic, getopts),
@@ -66,9 +66,9 @@ tcp_self_connect_test_common(Proto, IPAddr, Config) ->
     Msg = iolist_to_binary(lists:map(fun(_) -> <<"hello!">> end,
                            lists:seq(1, 3000))),
     MsgSize = byte_size(Msg),
-    {ok, Sock} = aloha_tcp:connect(?MODULE, IPAddr, 7777, Addr,
+    {ok, Sock} = aloha_tcp:connect(?MODULE, IPAddr, Port, Addr,
                                    Backend,
-                                   [{ip, IPAddr}, {port, 7777}, {mtu, Mtu},
+                                   [{ip, IPAddr}, {port, Port}, {mtu, Mtu},
                                     {rcv_buf, MsgSize}]),
     aloha_socket:send(Sock, Msg),
     aloha_socket:shutdown(Sock, write),
