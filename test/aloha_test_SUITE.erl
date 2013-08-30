@@ -41,7 +41,13 @@
 -define(SELF_PORT, 7777).
 
 suite() ->
-    [{timetrap, 50000}].
+    [{timetrap, timetrap()}].
+
+timetrap() ->
+    case os:getenv("TRAVIS") of
+        false -> 5000;
+        _ -> 180000
+    end.
 
 all() ->
     [{group, loopback}].
