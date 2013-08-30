@@ -121,7 +121,8 @@ handle_call({send, Data}, From, State) ->
     lager:info("TCP user write datalen ~p", [byte_size(Data)]),
     State2 = add_writer({From, Data}, State),
     State3 = process_writers(State2),
-    noreply(State3);
+    State4 = tcp_output(State3),
+    noreply(State4);
 handle_call({recv, _, _}, _From,
             #tcp_state{active = Active} = State) when Active =/= false ->
     % gen_tcp compat behaviour
@@ -213,7 +214,7 @@ handle_info({timeout, TRef, Name},
     noreply(State3);
 handle_info({timeout, TRef, delack_timeout},
             #tcp_state{delack_timer = TRef} = State) ->
-    lager:debug("delack timer expired"),
+    lager:info("delack timer expired"),
     State2 = tcp_output(true, State),
     noreply(State2);
 handle_info({'EXIT', Pid, Reason}, #tcp_state{owner = Pid} = State) ->
@@ -258,7 +259,8 @@ process_ack(#tcp{ack = 1, ackno = Ack},
     State2 = update_state_on_ack(Syn2 =/= Syn, Fin2 =/= Fin, State),
     State3 = State2#tcp_state{snd_una = Ack, snd_syn = Syn2, snd_buf = SndBuf2,
                               snd_fin = Fin2},
-    process_writers(State3);
+    State4 = process_writers(State3),
+    tcp_output(State4);
 process_ack(#tcp{ack = 0}, State) ->
     State;  % rst, (retransmitted) syn
 process_ack(#tcp{ack = 1} = Tcp, State) ->
@@ -665,9 +667,8 @@ process_writers(#tcp_state{snd_buf = SndBuf,
     case Data2 of
         <<>> ->
             State2 = State#tcp_state{snd_buf = SndBuf2, writers = Rest},
-            State3 = tcp_output(State2),
             gen_server:reply(From, ok),
-            process_writers(State3);
+            process_writers(State2);
         _ ->
             State#tcp_state{snd_buf = SndBuf2, writers = [{From, Data2}|Rest]}
     end.
