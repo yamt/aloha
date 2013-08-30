@@ -33,6 +33,12 @@
 
 -export([tcp_ipv4_self_connect_test/1]).
 -export([tcp_ipv6_self_connect_test/1]).
+-export([tcp_ipv4_echo_test/1]).
+-export([tcp_ipv6_echo_test/1]).
+
+-define(ECHO_PORT, 7).
+-define(LOCAL_PORT, 8888).
+-define(SELF_PORT, 7777).
 
 suite() ->
     [{timetrap, 5000}].
@@ -43,11 +49,14 @@ all() ->
 groups() ->
     [{loopback, [parallel], [
         tcp_ipv4_self_connect_test,
-        tcp_ipv6_self_connect_test
+        tcp_ipv6_self_connect_test,
+        tcp_ipv4_echo_test,
+        tcp_ipv6_echo_test
     ]}].
 
 init_per_suite(Config) ->
-    lager:start(),
+    %lager:start(),
+    %application:start(sasl),
     Owner = proc_lib:spawn(fun() ->
         aloha_tcp:init_tables(),
         receive
@@ -70,31 +79,47 @@ init_per_group(loopback, Config) ->
     {ok, Pid} = aloha_nic_loopback:create(?MODULE, HwAddr),
     ok = gen_server:call(Pid, {setopts, [{ip, <<127,0,0,1>>},
                                          {ipv6, <<1:128>>}]}),
-    [{loopback, Pid}|Config].
+    Server = proc_lib:spawn(fun() -> echo_server(?MODULE) end),
+    [{loopback, Pid}, {server, Server}|Config].
 
 end_per_group(loopback, Config) ->
     Pid = ?config(loopback, Config),
-    kill_and_wait(Pid).
+    Server = ?config(server, Config),
+    kill_and_wait([Pid, Server]).
 
 tcp_ipv4_self_connect_test(Config) ->
-    tcp_self_connect_test_common(ip, <<127,0,0,1>>, 7777, Config).
+    tcp_send_and_recv(ip, <<127,0,0,1>>, ?SELF_PORT,
+                          <<127,0,0,1>>, ?SELF_PORT, Config).
 
 tcp_ipv6_self_connect_test(Config) ->
-    tcp_self_connect_test_common(ipv6, <<1:128>>, 7777, Config).
+    tcp_send_and_recv(ipv6, <<1:128>>, ?SELF_PORT,
+                            <<1:128>>, ?SELF_PORT, Config).
 
-tcp_self_connect_test_common(Proto, IPAddr, Port, Config) ->
+tcp_ipv4_echo_test(Config) ->
+    tcp_send_and_recv(ip, <<127,0,0,1>>, ?ECHO_PORT,
+                          <<127,0,0,1>>, ?LOCAL_PORT, Config).
+
+tcp_ipv6_echo_test(Config) ->
+    tcp_send_and_recv(ipv6, <<1:128>>, ?ECHO_PORT,
+                            <<1:128>>, ?LOCAL_PORT, Config).
+
+make_data() ->
+    iolist_to_binary(lists:map(fun(_) -> <<"hello!">> end,
+                     lists:seq(1, 3000))).
+
+tcp_send_and_recv(_Proto, RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
+                  Config) ->
     Nic = ?config(loopback, Config),
     {ok, Opts} = gen_server:call(Nic, getopts),
     Addr = proplists:get_value(addr, Opts),
     Mtu = proplists:get_value(mtu, Opts),
     Backend = proplists:get_value(backend, Opts),
-    Msg = iolist_to_binary(lists:map(fun(_) -> <<"hello!">> end,
-                           lists:seq(1, 3000))),
+    Msg = make_data(),
     MsgSize = byte_size(Msg),
-    {ok, Sock} = aloha_tcp:connect(?MODULE, IPAddr, Port, Addr,
+    {ok, Sock} = aloha_tcp:connect(?MODULE, RemoteIPAddr, RemotePort, Addr,
                                    Backend,
-                                   [{ip, IPAddr}, {port, Port}, {mtu, Mtu},
-                                    {rcv_buf, MsgSize}]),
+                                   [{ip, LocalIPAddr}, {port, LocalPort},
+                                    {mtu, Mtu}, {rcv_buf, MsgSize}]),
     aloha_socket:send(Sock, Msg),
     aloha_socket:shutdown(Sock, write),
     {ok, Msg} = aloha_socket:recv(Sock, MsgSize),
@@ -116,3 +141,24 @@ kill_and_wait(List) ->
             {'DOWN', _, process, Pid, _} -> ok
         end
     end, List).
+
+echo_server(NS) ->
+    {ok, Sock} = aloha_socket:listen({NS, ?ECHO_PORT},
+                                     [binary, {packet, raw}, {reuseaddr, true},
+                                      {nodelay, true}, {active, false}]),
+    accept_loop(Sock, fun echo_loop/1).
+
+echo_loop(Sock) ->
+    case aloha_socket:recv(Sock, 0) of
+        {ok, Data} ->
+            ok = aloha_socket:send(Sock, Data),
+            echo_loop(Sock);
+        {error, closed} ->
+            ok = aloha_socket:close(Sock)
+    end.
+
+accept_loop(LSock, Fun) ->
+    {ok, Sock} = aloha_socket:accept(LSock),
+    Pid = proc_lib:spawn_link(fun() -> Fun(Sock) end),
+    ok = aloha_socket:controlling_process(Sock, Pid),
+    accept_loop(LSock, Fun).
