@@ -68,6 +68,8 @@ end_per_suite(Config) ->
 init_per_group(loopback, Config) ->
     HwAddr = <<16#0003478ca1b3:48>>,  % taken from my unused machine
     {ok, Pid} = aloha_nic_loopback:create(?MODULE, HwAddr),
+    ok = gen_server:call(Pid, {setopts, [{ip, <<127,0,0,1>>},
+                                         {ipv6, <<1:128>>}]}),
     [{loopback, Pid}|Config].
 
 end_per_group(loopback, Config) ->
@@ -78,11 +80,10 @@ tcp_ipv4_self_connect_test(Config) ->
     tcp_self_connect_test_common(ip, <<127,0,0,1>>, 7777, Config).
 
 tcp_ipv6_self_connect_test(Config) ->
-    tcp_self_connect_test_common(ipv6, <<0:128>>, 7777, Config).
+    tcp_self_connect_test_common(ipv6, <<1:128>>, 7777, Config).
 
 tcp_self_connect_test_common(Proto, IPAddr, Port, Config) ->
     Nic = ?config(loopback, Config),
-    ok = gen_server:call(Nic, {setopts, [{Proto, IPAddr}]}),
     {ok, Opts} = gen_server:call(Nic, getopts),
     Addr = proplists:get_value(addr, Opts),
     Mtu = proplists:get_value(mtu, Opts),
