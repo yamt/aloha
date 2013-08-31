@@ -85,13 +85,17 @@ init_per_group(loopback, Config) ->
     {ok, Pid} = aloha_nic_loopback:create(?MODULE, HwAddr),
     ok = gen_server:call(Pid, {setopts, [{ip, <<127,0,0,1>>},
                                          {ipv6, <<1:128>>}]}),
-    Server = proc_lib:spawn(fun() -> echo_server(?MODULE) end),
-    [{loopback, Pid}, {server, Server}|Config].
+    Servers = lists:map(fun({Port, Fun}) ->
+        proc_lib:spawn(fun() -> tcp_server(?MODULE, Port, Fun) end)
+    end, [
+        {?ECHO_PORT, fun echo_loop/1}
+    ]),
+    [{loopback, Pid}, {servers, Servers}|Config].
 
 end_per_group(loopback, Config) ->
     Pid = ?config(loopback, Config),
-    Server = ?config(server, Config),
-    kill_and_wait([Pid, Server]).
+    Servers = ?config(servers, Config),
+    kill_and_wait([Pid | Servers]).
 
 tcp_ipv4_self_connect_test(Config) ->
     tcp_send_and_recv(ip, <<127,0,0,1>>, ?SELF_PORT,
@@ -152,11 +156,17 @@ kill_and_wait(List) ->
         end
     end, List).
 
-echo_server(NS) ->
-    {ok, Sock} = aloha_socket:listen({NS, ?ECHO_PORT},
+tcp_server(NS, Port, Fun) ->
+    {ok, Sock} = aloha_socket:listen({NS, Port},
                                      [binary, {packet, raw}, {reuseaddr, true},
                                       {nodelay, true}, {active, false}]),
-    accept_loop(Sock, fun echo_loop/1).
+    accept_loop(Sock, Fun).
+
+accept_loop(LSock, Fun) ->
+    {ok, Sock} = aloha_socket:accept(LSock),
+    Pid = proc_lib:spawn_link(fun() -> Fun(Sock) end),
+    ok = aloha_socket:controlling_process(Sock, Pid),
+    accept_loop(LSock, Fun).
 
 echo_loop(Sock) ->
     case aloha_socket:recv(Sock, 0) of
@@ -166,9 +176,3 @@ echo_loop(Sock) ->
         {error, closed} ->
             ok = aloha_socket:close(Sock)
     end.
-
-accept_loop(LSock, Fun) ->
-    {ok, Sock} = aloha_socket:accept(LSock),
-    Pid = proc_lib:spawn_link(fun() -> Fun(Sock) end),
-    ok = aloha_socket:controlling_process(Sock, Pid),
-    accept_loop(LSock, Fun).
