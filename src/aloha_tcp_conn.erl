@@ -72,10 +72,11 @@ init(Opts) ->
     MSS = MTU - 20 - 20,
     Owner = proplists:get_value(owner, Opts),
     NS = proplists:get_value(namespace, Opts),
+    ISS = 16#ffff0000,
     State = #tcp_state{backend = Backend,
                        template = proplists:get_value(template, Opts),
-                       snd_nxt = 0,  % ISS
-                       snd_una = 0,  % ISS
+                       snd_nxt = ISS,
+                       snd_una = ISS,
                        snd_buf = <<>>,
                        snd_buf_size = proplists:get_value(snd_buf, Opts, 3000),
                        snd_mss = MSS,
