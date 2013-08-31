@@ -30,6 +30,7 @@
 
 seq(S) -> S band 16#ffffffff.
 
+% S1 <= S2 < S3
 seq_between(S1, S2, S3) ->
     ?SEQ_LTE(S1, S2) andalso ?SEQ_LT(S2, S3).
 
