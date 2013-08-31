@@ -153,15 +153,18 @@ handle_call(sockname, _From, #tcp_state{template = Tmpl} = State) ->
         [_, #ipv6{src = A}, #tcp{src_port = P}] -> {A, P}
     end,
     reply({ok, {aloha_addr:to_ip(Addr), Port}}, State);
-handle_call({controlling_process, NewOwner}, _From,
+handle_call({controlling_process, _}, _From,
+            #tcp_state{owner = none} = State) ->
+    reply(ok, State);
+handle_call({controlling_process, NewOwner}, {OldOwner, _},
             #tcp_state{owner = OldOwner} = State) ->
     true = State#tcp_state.suppress,  % assert.  see controlling_process/1
     State2 = State#tcp_state{owner = NewOwner},
     unlink(OldOwner),
     link(NewOwner),
     reply(ok, State2);
-handle_call(close, {Pid, _}, #tcp_state{owner = Pid} = State) ->
-    lager:info("TCP user close ~p", [self()]),
+handle_call(close, {Pid, _}, #tcp_state{owner = Owner} = State) ->
+    lager:info("TCP user close ~p from ~p owner ~p", [self(), Pid, Owner]),
     reply(ok, close(State));
 handle_call({setopts, Opts}, _From, State) ->
     {Ret, State2} = setopts(proplists:unfold(Opts), State),
@@ -226,7 +229,7 @@ handle_info(Info, State) ->
     noreply(State).
 
 terminate(Reason, #tcp_state{key = Key}) ->
-    lager:info("conn process terminate ~p", [Reason]),
+    lager:info("TCP ~p conn process terminate ~p", [self(), Reason]),
     true = ets:delete(?MODULE, Key),
     ok.
 
@@ -316,8 +319,8 @@ update_state_on_close(State) ->
 
 % incoming rst/syn/fin
 update_state_on_flags(#tcp{rst = 1}, #tcp_state{} = State) ->
-    lager:debug("closed on rst"),
-    set_state(closed, State);
+    lager:info("TCP ~p closed on rst", [self()]),
+    reset(State);
 update_state_on_flags(#tcp{syn = 1, fin = 0},
                       #tcp_state{state = syn_sent} = State) ->
     set_state(syn_received, State);
@@ -338,6 +341,11 @@ update_state_on_flags(#tcp{syn = 0, fin = 1},
     deliver_to_app({tcp_closed, self_socket()}, State2);
 update_state_on_flags(_, State) ->
     State.
+
+reset(State) ->
+    % XXX notify owner  tcp_closed?
+    State2 = detach_owner(State),
+    set_state(closed, State2).
 
 % in-window check  RFC 793 3.3. (p.26)
 accept_check(#tcp{syn = 0}, _, #tcp_state{rcv_nxt = undefined}) ->
@@ -378,6 +386,11 @@ update_receiver(#tcp{syn = 1, seqno = Seq}, <<>>,
                 #tcp_state{rcv_nxt = undefined, state = TcpState} = State) ->
     true = TcpState =:= established orelse TcpState =:= syn_received,
     {true, State#tcp_state{rcv_nxt = Seq + 1}};
+update_receiver(#tcp{seqno = Seq} = _Tcp, _Data,
+                #tcp_state{rcv_nxt = Seq, owner = none} = State)
+                when data =/= <<>> ->
+    send_rst(State),
+    {false, set_state(closed, State)};
 update_receiver(#tcp{seqno = Seq} = Tcp, Data,
                 #tcp_state{rcv_nxt = Seq} = State) ->
     lager:debug("appending ~p bytes to rcv_buf ~p", [byte_size(Data), Data]),
@@ -538,6 +551,29 @@ build_and_send_packet(Syn, Data, Fin,
     aloha_tcp:send_packet(Pkt, NS, Backend),
     State#tcp_state{snd_nxt = calc_next_seq(Tcp, Data), rcv_adv = Adv}.
 
+send_rst(#tcp_state{snd_nxt = SndNxt,
+                    rcv_nxt = RcvNxt,
+                    backend = Backend,
+                    template = [Ether, Ip, TcpTmpl],
+                    namespace = NS}) ->
+    {Ack, Ackno} = case RcvNxt of
+        undefined -> {0, 0};
+        V ->         {1, V}
+    end,
+    Tcp = TcpTmpl#tcp{
+        seqno = SndNxt,
+        ackno = Ackno,
+        syn = 0,
+        fin = 0,
+        ack = Ack,
+        rst = 1,
+        psh = 1,
+        window = 0,
+        options = []
+    },
+    Pkt = [Ether, Ip, Tcp, <<>>],
+    aloha_tcp:send_packet(Pkt, NS, Backend).
+
 should_exit(#tcp_state{state = closed, owner = none}) ->
     true;
 should_exit(_) ->
@@ -572,9 +608,15 @@ self_socket() ->
 % i'd call this a bad api, but we need this workaround because it's done
 % by gen_tcp, which we want to behave similarly with.
 controlling_process({aloha_socket, Pid} = Sock, NewOwner) ->
-    {OldOwner, _} = gen_server:call(Pid, get_owner_info),
-    controlling_process(Sock, OldOwner, NewOwner).
+    try
+        {OldOwner, _} = gen_server:call(Pid, get_owner_info),
+        controlling_process(Sock, OldOwner, NewOwner)
+    catch
+        error:noproc -> ok
+    end.
 
+controlling_process(_, none, _) ->
+    ok;
 controlling_process({aloha_socket, Pid} = Sock, OldOwner, NewOwner)
         when OldOwner =:= self() ->
     lager:info("~p change owner ~p -> ~p", [Sock, OldOwner, NewOwner]),
@@ -756,8 +798,11 @@ shutdown_sender(State) ->
 close(State) ->
     State2 = shutdown_receiver(State),
     State3 = shutdown_sender(State2),
-    unlink(State3#tcp_state.owner),
-    State3#tcp_state{owner = none}.
+    detach_owner(State3).
+
+detach_owner(#tcp_state{owner = Owner} = State) ->
+    unlink(Owner),
+    State#tcp_state{owner = none}.
 
 %% setopt
 
