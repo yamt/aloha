@@ -421,14 +421,14 @@ rcv_buf_space(#tcp_state{rcv_buf_size = BufSize, rcv_buf = Buf}) ->
 rcv_wnd(#tcp_state{rcv_adv = undefined} = Tcp) ->
     rcv_buf_space(Tcp);
 rcv_wnd(#tcp_state{rcv_nxt = Nxt, rcv_adv = Adv} = Tcp) ->
-    max(rcv_buf_space(Tcp), Adv - Nxt).
+    max(rcv_buf_space(Tcp), ?SEQ(Adv - Nxt)).
 
 % window size to advertise
 % RFC 1122 4.2.3.3 receiver side SWS avoidance
 choose_rcv_wnd(#tcp_state{rcv_adv = undefined} = State) ->
     rcv_buf_space(State);
 choose_rcv_wnd(#tcp_state{rcv_nxt = Nxt, rcv_adv = Adv} = State) ->
-    choose_rcv_wnd(rcv_buf_space(State), Adv - Nxt, State).
+    choose_rcv_wnd(rcv_buf_space(State), ?SEQ(Adv - Nxt), State).
 
 choose_rcv_wnd(NextWnd, AdvWnd,
                #tcp_state{rcv_buf_size = BufSize, rcv_mss = MSS})
@@ -519,7 +519,7 @@ build_and_send_packet(Syn, Data, Fin,
     Win = choose_rcv_wnd(State),
     {Ack, Ackno, Adv} = case RcvNxt of
         undefined -> {0, 0, undefined};
-        V ->         {1, V, V + Win}
+        V ->         {1, V, ?SEQ(V + Win)}
     end,
     Tcp = TcpTmpl#tcp{
         seqno = SndNxt,
