@@ -391,14 +391,14 @@ update_receiver(#tcp{seqno = Seq, rst = 0} = _Tcp, _Data,
                 when data =/= <<>> ->
     send_rst(State),
     {false, set_state(closed, State)};
-update_receiver(#tcp{seqno = Seq} = Tcp, Data,
+update_receiver(#tcp{seqno = Seq, fin = Fin} = Tcp, Data,
                 #tcp_state{rcv_nxt = Seq} = State) ->
     lager:debug("appending ~p bytes to rcv_buf ~p", [byte_size(Data), Data]),
     RcvBuf = <<(State#tcp_state.rcv_buf)/bytes, Data/bytes>>,
     Nxt = calc_next_seq(Tcp, Data),
     {AckNow, State2} = setup_ack(Nxt, State),
     State3 = State2#tcp_state{rcv_nxt = Nxt, rcv_buf = RcvBuf},
-    {AckNow, State3};
+    {AckNow orelse Fin =:= 1, State3};
 update_receiver(_, _, State) ->
     % drop out of order segment
     {true, State}.
