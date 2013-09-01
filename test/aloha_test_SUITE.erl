@@ -157,7 +157,7 @@ tcp_send_and_recv(_Proto, RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
     ok = aloha_socket:shutdown(Sock, write),
     {ok, Msg} = aloha_socket:recv(Sock, MsgSize),
     ok = aloha_socket:close(Sock),
-    lager:info("cleaning up ..."),
+    ct:pal("cleaning up ..."),
     % don't bother to wait for 2MSL
     {aloha_socket, SockPid} = Sock,
     kill_and_wait(SockPid).
