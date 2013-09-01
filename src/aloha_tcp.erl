@@ -122,7 +122,7 @@ make_rst(Rep, #tcp{ack = 0} = Tcp, Data) ->
     Rep#tcp{seqno = 0, ackno = aloha_tcp_conn:calc_next_seq(Tcp, Data),
             rst = 1, ack = 1};
 make_rst(Rep, Tcp, _Data) ->
-    Rep#tcp{seqno = Tcp#tcp.ackno, rst = 1}.
+    Rep#tcp{seqno = Tcp#tcp.ackno, rst = 1, ack = 0, psh = 0}.
 
 reply_rst(#tcp{rst = 1}, _, _, _) ->
     ok;
