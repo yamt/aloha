@@ -35,4 +35,3 @@ TODO
 - use gproc instead of raw ets tables?
 - arp/ndp cache expiry
 - handle exiting processes in accept/read/write queues
-- map noproc -> {error, closed} where appropriate

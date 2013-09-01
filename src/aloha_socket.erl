@@ -33,7 +33,7 @@ listen(Port, Opts) ->
     aloha_tcp:listen(Port, Opts).
 
 accept({aloha_socket, SockPid}) ->
-    gen_server:call(SockPid, accept, infinity);
+    call(SockPid, accept);
 accept(Sock) ->
     gen_tcp:accept(Sock).
 
@@ -43,27 +43,27 @@ controlling_process(Sock, Pid) ->
     gen_tcp:controlling_process(Sock, Pid).
 
 setopts({aloha_socket, SockPid}, Opts) ->
-    gen_server:call(SockPid, {setopts, Opts}, infinity);
+    call(SockPid, {setopts, Opts});
 setopts(Sock, Opts) ->
     inet:setopts(Sock, Opts).
 
 send({aloha_socket, SockPid}, Data) ->
-    gen_server:call(SockPid, {send, iolist_to_binary(Data)}, infinity);
+    call(SockPid, {send, iolist_to_binary(Data)});
 send(Sock, Data) ->
     gen_tcp:send(Sock, Data).
 
 recv({aloha_socket, SockPid}, Len) ->
-    gen_server:call(SockPid, {recv, Len, infinity}, infinity);
+    call(SockPid, {recv, Len, infinity});
 recv(Sock, Len) ->
     gen_tcp:recv(Sock, Len).
 
 recv({aloha_socket, SockPid}, Len, Timeout) ->
-    gen_server:call(SockPid, {recv, Len, Timeout}, infinity);
+    call(SockPid, {recv, Len, Timeout});
 recv(Sock, Len, Timeout) ->
     gen_tcp:recv(Sock, Len, Timeout).
 
 close({aloha_socket, SockPid}) ->
-    gen_server:call(SockPid, close, infinity);
+    call(SockPid, close);
 close(Sock) ->
     gen_tcp:close(Sock).
 
@@ -78,11 +78,22 @@ shutdown(Sock, How) ->
     gen_tcp:shutdown(Sock, How).
 
 peername({aloha_socket, SockPid}) ->
-    gen_server:call(SockPid, peername, infinity);
+    call(SockPid, peername);
 peername(Sock) ->
     inet:peername(Sock).
 
 sockname({aloha_socket, SockPid}) ->
-    gen_server:call(SockPid, sockname, infinity);
+    call(SockPid, sockname);
 sockname(Sock) ->
     inet:sockname(Sock).
+
+call(Pid, Req) ->
+    try
+        gen_server:call(Pid, Req, infinity)
+    catch
+        exit:{noproc, _} -> {error, closed};
+        exit:{normal, _} -> {error, closed};
+        exit:Reason ->
+            lager:info("exit reason ~p", [Reason]),
+            {error, closed}
+    end.
