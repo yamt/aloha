@@ -35,8 +35,11 @@
 -export([tcp_ipv6_self_connect_test/1]).
 -export([tcp_ipv4_echo_test/1]).
 -export([tcp_ipv6_echo_test/1]).
+-export([tcp_ipv4_close/1]).
+-export([tcp_ipv6_close/1]).
 
 -define(ECHO_PORT, 7).
+-define(CLOSE_PORT, 5000).
 -define(LOCAL_PORT, 8888).
 -define(SELF_PORT, 7777).
 
@@ -57,7 +60,9 @@ groups() ->
         tcp_ipv4_self_connect_test,
         tcp_ipv6_self_connect_test,
         tcp_ipv4_echo_test,
-        tcp_ipv6_echo_test
+        tcp_ipv6_echo_test,
+        tcp_ipv4_close,
+        tcp_ipv6_close
     ]}].
 
 init_per_suite(Config) ->
@@ -88,7 +93,8 @@ init_per_group(loopback, Config) ->
     Servers = lists:map(fun({Port, Fun}) ->
         proc_lib:spawn(fun() -> tcp_server(?MODULE, Port, Fun) end)
     end, [
-        {?ECHO_PORT, fun echo_loop/1}
+        {?ECHO_PORT, fun echo_loop/1},
+        {?CLOSE_PORT, fun(Sock) -> aloha_socket:close(Sock) end}
     ]),
     [{loopback, Pid}, {servers, Servers}|Config].
 
@@ -113,6 +119,26 @@ tcp_ipv6_echo_test(Config) ->
     tcp_send_and_recv(ipv6, <<1:128>>, ?ECHO_PORT,
                             <<1:128>>, ?LOCAL_PORT, Config).
 
+tcp_ipv4_close(Config) ->
+    try
+        tcp_send_and_recv(ip, <<127,0,0,1>>, ?CLOSE_PORT,
+                              <<127,0,0,1>>, ?LOCAL_PORT, Config)
+    catch
+        error:{badmatch, {error, closed}} = E ->
+            ct:pal("expected exception ~p", [E]),
+            ok
+    end.
+
+tcp_ipv6_close(Config) ->
+    try
+        tcp_send_and_recv(ip, <<1:128>>, ?CLOSE_PORT,
+                              <<1:128>>, ?LOCAL_PORT, Config)
+    catch
+        error:{badmatch, {error, closed}} = E ->
+            ct:pal("expected exception ~p", [E]),
+            ok
+    end.
+
 make_data() ->
     iolist_to_binary(lists:map(fun(_) -> <<"hello!">> end,
                      lists:seq(1, 3000))).
@@ -134,10 +160,10 @@ tcp_send_and_recv(_Proto, RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
     {ok, PeerName} = aloha_socket:peername(Sock),
     SockName = {aloha_addr:to_ip(LocalIPAddr), LocalPort},
     {ok, SockName} = aloha_socket:sockname(Sock),
-    aloha_socket:send(Sock, Msg),
-    aloha_socket:shutdown(Sock, write),
+    ok = aloha_socket:send(Sock, Msg),
+    ok = aloha_socket:shutdown(Sock, write),
     {ok, Msg} = aloha_socket:recv(Sock, MsgSize),
-    aloha_socket:close(Sock),
+    ok = aloha_socket:close(Sock),
     lager:info("cleaning up ..."),
     % don't bother to wait for 2MSL
     {aloha_socket, SockPid} = Sock,
