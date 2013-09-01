@@ -31,12 +31,9 @@
 -export([suite/0, all/0, init_per_suite/1, end_per_suite/1]).
 -export([groups/0, init_per_group/2, end_per_group/2]).
 
--export([tcp_ipv4_self_connect_test/1]).
--export([tcp_ipv6_self_connect_test/1]).
--export([tcp_ipv4_echo_test/1]).
--export([tcp_ipv6_echo_test/1]).
--export([tcp_ipv4_close/1]).
--export([tcp_ipv6_close/1]).
+-export([tcp_self_connect/1]).
+-export([tcp_echo/1]).
+-export([tcp_close/1]).
 
 -define(ECHO_PORT, 7).
 -define(CLOSE_PORT, 5000).
@@ -56,14 +53,14 @@ all() ->
     [{group, loopback}].
 
 groups() ->
-    [{loopback, [parallel], [
-        tcp_ipv4_self_connect_test,
-        tcp_ipv6_self_connect_test,
-        tcp_ipv4_echo_test,
-        tcp_ipv6_echo_test,
-        tcp_ipv4_close,
-        tcp_ipv6_close
-    ]}].
+    Tests = [
+        tcp_self_connect,
+        tcp_echo,
+        tcp_close
+    ],
+    [{loopback, [parallel], [{group, ipv4}, {group, ipv6}]},
+     {ipv4, [parallel], Tests},
+     {ipv6, [parallel], Tests}].
 
 init_per_suite(Config) ->
     %lager:start(),
@@ -96,43 +93,39 @@ init_per_group(loopback, Config) ->
         {?ECHO_PORT, fun echo_loop/1},
         {?CLOSE_PORT, fun(Sock) -> aloha_socket:close(Sock) end}
     ]),
-    [{loopback, Pid}, {servers, Servers}|Config].
+    [{loopback, Pid}, {servers, Servers}|Config];
+init_per_group(ipv4, Config) ->
+    [{proto, ipv4}, {ip, <<127,0,0,1>>}|Config];
+init_per_group(ipv6, Config) ->
+    [{proto, ipv6}, {ip, <<1:128>>}|Config].
 
 end_per_group(loopback, Config) ->
     Pid = ?config(loopback, Config),
     Servers = ?config(servers, Config),
-    kill_and_wait([Pid | Servers]).
+    kill_and_wait([Pid | Servers]);
+end_per_group(ipv4, _Config) ->
+    ok;
+end_per_group(ipv6, _Config) ->
+    ok.
 
-tcp_ipv4_self_connect_test(Config) ->
-    tcp_send_and_recv(ip, <<127,0,0,1>>, ?SELF_PORT,
-                          <<127,0,0,1>>, ?SELF_PORT, Config).
+tcp_self_connect(Config) ->
+    Proto = ?config(proto, Config),
+    IP = ?config(ip, Config),
+    tcp_send_and_recv(Proto, IP, ?SELF_PORT,
+                             IP, ?SELF_PORT, Config).
 
-tcp_ipv6_self_connect_test(Config) ->
-    tcp_send_and_recv(ipv6, <<1:128>>, ?SELF_PORT,
-                            <<1:128>>, ?SELF_PORT, Config).
+tcp_echo(Config) ->
+    Proto = ?config(proto, Config),
+    IP = ?config(ip, Config),
+    tcp_send_and_recv(Proto, IP, ?ECHO_PORT,
+                             IP, ?LOCAL_PORT, Config).
 
-tcp_ipv4_echo_test(Config) ->
-    tcp_send_and_recv(ip, <<127,0,0,1>>, ?ECHO_PORT,
-                          <<127,0,0,1>>, ?LOCAL_PORT, Config).
-
-tcp_ipv6_echo_test(Config) ->
-    tcp_send_and_recv(ipv6, <<1:128>>, ?ECHO_PORT,
-                            <<1:128>>, ?LOCAL_PORT, Config).
-
-tcp_ipv4_close(Config) ->
+tcp_close(Config) ->
+    Proto = ?config(proto, Config),
+    IP = ?config(ip, Config),
     try
-        tcp_send_and_recv(ip, <<127,0,0,1>>, ?CLOSE_PORT,
-                              <<127,0,0,1>>, ?LOCAL_PORT, Config)
-    catch
-        error:{badmatch, {error, closed}} = E ->
-            ct:pal("expected exception ~p", [E]),
-            ok
-    end.
-
-tcp_ipv6_close(Config) ->
-    try
-        tcp_send_and_recv(ip, <<1:128>>, ?CLOSE_PORT,
-                              <<1:128>>, ?LOCAL_PORT, Config)
+        tcp_send_and_recv(Proto, IP, ?CLOSE_PORT,
+                                 IP, ?LOCAL_PORT, Config)
     catch
         error:{badmatch, {error, closed}} = E ->
             ct:pal("expected exception ~p", [E]),
