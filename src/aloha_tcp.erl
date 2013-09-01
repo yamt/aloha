@@ -131,7 +131,7 @@ reply_rst(Tcp, Stack, Data, Opts) ->
     NS = proplists:get_value(namespace, Opts),
     [Ether, Ip, Tcp2] = make_reply_template(Tcp, Stack),
     Tcp3 = make_rst(Tcp2, Tcp, Data),
-    aloha_neighbor:send_packet([Ether, Ip, Tcp3, <<>>], NS, Backend).
+    send_packet([Ether, Ip, Tcp3, <<>>], NS, Backend).
 
 send_packet(Pkt, NS, Backend) ->
     [_, _, Tcp, Data] = Pkt,
