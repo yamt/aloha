@@ -167,6 +167,7 @@ kill_and_wait(Pid) when is_pid(Pid) ->
 kill_and_wait(List) ->
     lists:foreach(fun(Pid) ->
         monitor(process, Pid),
+        % XXX this leaves an entry in ets
         exit(Pid, kill)
     end, List),
     lists:foreach(fun(Pid) ->
