@@ -386,7 +386,7 @@ update_receiver(#tcp{syn = 1, seqno = Seq}, <<>>,
                 #tcp_state{rcv_nxt = undefined, state = TcpState} = State) ->
     true = TcpState =:= established orelse TcpState =:= syn_received,
     {true, State#tcp_state{rcv_nxt = Seq + 1}};
-update_receiver(#tcp{seqno = Seq} = _Tcp, _Data,
+update_receiver(#tcp{seqno = Seq, rst = 0} = _Tcp, _Data,
                 #tcp_state{rcv_nxt = Seq, owner = none} = State)
                 when data =/= <<>> ->
     send_rst(State),
