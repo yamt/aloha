@@ -78,6 +78,8 @@ trim(Syn, Data, Fin, Seq, WinStart) ->
 
 accept_check(_, 1, undefined, _) ->  % accept syn
     true;
+accept_check(_, 0, undefined, _) ->  % or rst
+    true;
 accept_check(Seq, 0, RcvNxt, 0) ->
     Seq =:= RcvNxt;
 accept_check(Seq, 0, RcvNxt, RcvWnd) ->
