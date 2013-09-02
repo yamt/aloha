@@ -30,6 +30,8 @@
 -export([listen/2]).
 -export([connect/6]).
 
+-behaviour(aloha_protocol).
+
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
 init_tables() ->

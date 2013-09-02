@@ -25,6 +25,8 @@
 -module(aloha_ether).
 -export([handle/3]).
 
+-behaviour(aloha_protocol).
+
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
 -define(BROADCAST, <<16#ffffffffffff:(6*8)>>).

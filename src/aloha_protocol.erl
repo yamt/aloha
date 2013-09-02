@@ -22,34 +22,10 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
--module(aloha_ipv6).
--export([handle/3]).
--export([solicited_node_multicast/1]).
--export([multicast_ether/1]).
+-module(aloha_protocol).
+-export([behaviour_info/1]).
 
--behaviour(aloha_protocol).
-
--include_lib("aloha_packet/include/aloha_packet.hrl").
-
-handle(Pkt, Stack, Opts) ->
-    {Ip, Next, Rest} = aloha_packet:decode(ipv6, Pkt, Stack),
-    IpAddr = proplists:get_value(ipv6, Opts, none),
-    Mcast = solicited_node_multicast(IpAddr),
-    handle_ipv6(Ip, Next, Rest, IpAddr, Mcast, Stack).
-
-handle_ipv6(#ipv6{dst = IpAddr} = Ip, Next, Rest, IpAddr, _Mcast, Stack) ->
-    aloha_nic:enqueue({Next, Rest, [Ip|Stack]});
-handle_ipv6(#ipv6{dst = Mcast} = Ip, Next, Rest, _IpAddr, Mcast, Stack) ->
-    aloha_nic:enqueue({Next, Rest, [Ip|Stack]});
-handle_ipv6(Ip, _Next, _Rest, _IpAddr, _Mcast, _Stack) ->
-    lager:info("not ours ~p", [aloha_utils:pr(Ip, ?MODULE)]).
-
-% compute solicited-node multicast address (RFC 2323)
-solicited_node_multicast(Addr) ->
-    <<_:104, Tail:24>> = Addr,
-    <<16#ff02:16, 0:16, 0:16, 0:16, 0:16, 1:16, 16#ff:8, Tail:24>>.
-
-% RFC 2424 7.
-multicast_ether(<<_:(12*8), A, B, C, D>>) ->
-    <<16#33, 16#33, A, B, C, D>>.
-
+behaviour_info(callbacks) ->
+    [
+        {handle, 3}
+    ].

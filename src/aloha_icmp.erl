@@ -25,6 +25,8 @@
 -module(aloha_icmp).
 -export([handle/3]).
 
+-behaviour(aloha_protocol).
+
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
 handle(Pkt, Stack, Opts) ->
