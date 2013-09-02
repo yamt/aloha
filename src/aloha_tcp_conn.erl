@@ -414,7 +414,7 @@ segment_arrival({#tcp{ack = Ack, rst = Rst, syn = Syn} = Tcp, Data}, State) when
     State5 = tcp_output(AckNow, State4),
     noreply(State5);
 segment_arrival({#tcp{} = Tcp, Data}, State) ->
-    lager:info("TCP unimplemented datalen ~p~n~s", [byte_size(Data), pp(Tcp)]),
+    lager:info("TCP unimplemented datalen ~p~n~p", [byte_size(Data), pp(Tcp)]),
     noreply(State).
 
 next_state_on_close(established) -> fin_wait_1;
