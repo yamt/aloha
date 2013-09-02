@@ -35,13 +35,14 @@ handle(Pkt, Stack, Opts) ->
     {Ip, Next, Rest} = aloha_packet:decode(ipv6, Pkt, Stack),
     IpAddr = proplists:get_value(ipv6, Opts, none),
     Mcast = solicited_node_multicast(IpAddr),
-    handle_ipv6(Ip, Next, Rest, IpAddr, Mcast, Stack).
+    handle_ipv6(Ip, Next, Rest, IpAddr, Mcast, Stack, Opts).
 
-handle_ipv6(#ipv6{dst = IpAddr} = Ip, Next, Rest, IpAddr, _Mcast, Stack) ->
-    aloha_nic:enqueue({Next, Rest, [Ip|Stack]});
-handle_ipv6(#ipv6{dst = Mcast} = Ip, Next, Rest, _IpAddr, Mcast, Stack) ->
-    aloha_nic:enqueue({Next, Rest, [Ip|Stack]});
-handle_ipv6(Ip, _Next, _Rest, _IpAddr, _Mcast, _Stack) ->
+handle_ipv6(#ipv6{dst = IpAddr} = Ip, Next, Rest, IpAddr, _Mcast, Stack,
+            Opts) ->
+    aloha_protocol:dispatch({Next, Rest, [Ip|Stack]}, Opts);
+handle_ipv6(#ipv6{dst = Mcast} = Ip, Next, Rest, _IpAddr, Mcast, Stack, Opts) ->
+    aloha_protocol:dispatch({Next, Rest, [Ip|Stack]}, Opts);
+handle_ipv6(Ip, _Next, _Rest, _IpAddr, _Mcast, _Stack, _Opts) ->
     lager:info("not ours ~p", [aloha_utils:pr(Ip, ?MODULE)]).
 
 % compute solicited-node multicast address (RFC 2323)
@@ -52,4 +53,3 @@ solicited_node_multicast(Addr) ->
 % RFC 2424 7.
 multicast_ether(<<_:(12*8), A, B, C, D>>) ->
     <<16#33, 16#33, A, B, C, D>>.
-

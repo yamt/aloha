@@ -34,13 +34,14 @@ handle(Pkt, Stack, Opts) ->
     IpAddr = proplists:get_value(ip, Opts),
     Mask = proplists:get_value(ip_mask, Opts, <<255,255,255,0>>),
     Bcast = aloha_utils:bin_or(IpAddr, aloha_utils:bin_not(Mask)),
-    handle_ip(Ip, Next, Rest, IpAddr, Bcast, Stack).
+    handle_ip(Ip, Next, Rest, IpAddr, Bcast, Stack, Opts).
 
-handle_ip(#ip{checksum = bad} = Ip, _Next, _Rest, _IpAddr, _Bcast, _Stack) ->
+handle_ip(#ip{checksum = bad} = Ip, _Next, _Rest, _IpAddr, _Bcast, _Stack,
+          _Opts) ->
     lager:info("IP bad checksum ~p", [Ip]);
-handle_ip(#ip{dst = IpAddr} = Ip, Next, Rest, IpAddr, _Bcast, Stack) ->
-    aloha_nic:enqueue({Next, Rest, [Ip|Stack]});
-handle_ip(#ip{dst = Bcast} = Ip, Next, Rest, _IpAddr, Bcast, Stack) ->
-    aloha_nic:enqueue({Next, Rest, [Ip|Stack]});
-handle_ip(Ip, _Next, _Rest, _IpAddr, _Bcast, _Stack) ->
+handle_ip(#ip{dst = IpAddr} = Ip, Next, Rest, IpAddr, _Bcast, Stack, Opts) ->
+    aloha_protocol:dispatch({Next, Rest, [Ip|Stack]}, Opts);
+handle_ip(#ip{dst = Bcast} = Ip, Next, Rest, _IpAddr, Bcast, Stack, Opts) ->
+    aloha_protocol:dispatch({Next, Rest, [Ip|Stack]}, Opts);
+handle_ip(Ip, _Next, _Rest, _IpAddr, _Bcast, _Stack, _Opts) ->
     lager:info("not ours ~p", [aloha_utils:pr(Ip, ?MODULE)]).

@@ -25,7 +25,7 @@
 -module(aloha_nic).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
--export([send_packet/1, send_packet/2, enqueue/1]).
+-export([send_packet/1, send_packet/2, next_protocol/2]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
@@ -82,7 +82,7 @@ ethertype_mod(icmp) -> aloha_icmp;
 ethertype_mod(icmpv6) -> aloha_icmpv6;
 ethertype_mod(tcp) -> aloha_tcp.
 
-enqueue(Msg) ->
+next_protocol(Msg, _Opts) ->
     gen_server:cast(self(), Msg).
 
 send_packet(Pkt) ->

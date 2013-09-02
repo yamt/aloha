@@ -34,14 +34,15 @@
 handle(Pkt, [], Opts) ->
     {Ether, Next, Rest} = aloha_packet:decode(ether, Pkt, []),
     OurAddr = proplists:get_value(addr, Opts),
-    handle_ether(Ether, Next, Rest, OurAddr).
+    handle_ether(Ether, Next, Rest, OurAddr, Opts).
 
-handle_ether(#ether{dst = ?BROADCAST} = Ether, Next, Rest, _OurAddr) ->
-    aloha_nic:enqueue({Next, Rest, [Ether]});
-handle_ether(#ether{dst = <<16#33, 16#33, _/bytes>>} = Ether, Next, Rest, _) ->
+handle_ether(#ether{dst = ?BROADCAST} = Ether, Next, Rest, _OurAddr, Opts) ->
+    aloha_protocol:dispatch({Next, Rest, [Ether]}, Opts);
+handle_ether(#ether{dst = <<16#33, 16#33, _/bytes>>} = Ether, Next, Rest, _,
+             Opts) ->
     % ipv6 multicast (RFC 2464 7.)
-    aloha_nic:enqueue({Next, Rest, [Ether]});
-handle_ether(#ether{dst = OurAddr} = Ether, Next, Rest, OurAddr) ->
-    aloha_nic:enqueue({Next, Rest, [Ether]});
-handle_ether(#ether{dst = Dst}, _Next, _Rest, _OurAddr) ->
+    aloha_protocol:dispatch({Next, Rest, [Ether]}, Opts);
+handle_ether(#ether{dst = OurAddr} = Ether, Next, Rest, OurAddr, Opts) ->
+    aloha_protocol:dispatch({Next, Rest, [Ether]}, Opts);
+handle_ether(#ether{dst = Dst}, _Next, _Rest, _OurAddr, _Opts) ->
     lager:info("ether not ours ~w~n", [Dst]).

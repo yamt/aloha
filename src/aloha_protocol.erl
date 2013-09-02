@@ -24,8 +24,12 @@
 
 -module(aloha_protocol).
 -export([behaviour_info/1]).
+-export([dispatch/2]).
 
 behaviour_info(callbacks) ->
     [
         {handle, 3}
     ].
+
+dispatch(Msg, Opts) ->
+    aloha_nic:next_protocol(Msg, Opts).
