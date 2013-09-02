@@ -40,6 +40,8 @@
 -define(LOCAL_PORT, 8888).
 -define(SELF_PORT, 7777).
 
+-define(NREPEAT, 16).
+
 suite() ->
     [{timetrap, timetrap()}].
 
@@ -59,11 +61,12 @@ groups() ->
         tcp_close
     ],
     [{loopback, [parallel], [{group, ipv4}, {group, ipv6}]},
-     {ipv4, [parallel], Tests},
-     {ipv6, [parallel], Tests}].
+     {ipv4, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests},
+     {ipv6, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests}].
 
 init_per_suite(Config) ->
     %lager:start(),
+    %lager:set_loglevel(lager_file_backend, "console.log", warning),
     %application:start(sasl),
     Owner = proc_lib:spawn(fun() ->
         aloha_tcp:init_tables(),
@@ -159,16 +162,27 @@ tcp_send_and_recv(_Proto, RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
     ok = aloha_socket:close(Sock),
     ct:pal("cleaning up ..."),
     % don't bother to wait for 2MSL
+    case aloha_socket:force_close(Sock) of
+        ok -> ok;
+        {error, closed} -> ok
+    end,
     {aloha_socket, SockPid} = Sock,
-    kill_and_wait(SockPid).
+    wait(SockPid).
 
 kill_and_wait(Pid) when is_pid(Pid) ->
     kill_and_wait([Pid]);
 kill_and_wait(List) ->
     lists:foreach(fun(Pid) ->
-        monitor(process, Pid),
         % XXX this leaves an entry in ets
         exit(Pid, kill)
+    end, List),
+    wait(List).
+
+wait(Pid) when is_pid(Pid) ->
+    wait([Pid]);
+wait(List) ->
+    lists:foreach(fun(Pid) ->
+        monitor(process, Pid)
     end, List),
     lists:foreach(fun(Pid) ->
         receive
