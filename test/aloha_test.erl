@@ -28,7 +28,7 @@
 
 tcp_self_connect_test_common(Proto, IPAddr) ->
     {ok, Pid} = aloha_neighbor:start_link(),
-    aloha_tcp:init_tables(),
+    aloha_tables:init_tables(),
     HwAddr = <<16#0003478ca1b3:48>>,  % taken from my unused machine
     {ok, Nic} = aloha_nic_loopback:create(?MODULE, HwAddr),
     ok = gen_server:call(Nic, {setopts, [{Proto, IPAddr}]}),
@@ -60,7 +60,7 @@ tcp_self_connect_test_common(Proto, IPAddr) ->
             {'DOWN', _, process, P, _} -> ok
         end
     end, [Pid, Nic, SockPid]),
-    aloha_tcp:fini_tables().
+    aloha_tables:fini_tables().
 
 tcp_ipv4_self_connect_test() ->
     tcp_self_connect_test_common(ip, <<127,0,0,1>>).

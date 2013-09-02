@@ -23,7 +23,6 @@
 % SUCH DAMAGE.
 
 -module(aloha_tcp).
--export([init_tables/0, fini_tables/0]).
 -export([handle/3]).
 -export([send_packet/3]).
 
@@ -33,16 +32,6 @@
 -behaviour(aloha_protocol).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
-
-init_tables() ->
-    ets:new(aloha_nic, [set, named_table, public]),
-    ets:new(aloha_tcp_conn, [set, named_table, public]),
-    ets:new(aloha_tcp_listener, [set, named_table, public]).
-
-fini_tables() ->
-    ets:delete(aloha_nic),
-    ets:delete(aloha_tcp_conn),
-    ets:delete(aloha_tcp_listener).
 
 handle(Pkt, Stack, Opts) ->
     [_Ip, _Ether] = Stack,
