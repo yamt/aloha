@@ -314,7 +314,6 @@ update_state_on_close(State) ->
 
 % incoming rst/syn/fin
 update_state_on_flags(#tcp{rst = 1}, #tcp_state{} = State) ->
-    lager:info("TCP ~p closed on rst", [self()]),
     reset(State);
 update_state_on_flags(#tcp{syn = 1, fin = 0},
                       #tcp_state{state = syn_sent} = State) ->
@@ -338,9 +337,10 @@ update_state_on_flags(_, State) ->
     State.
 
 reset(State) ->
+    lager:info("TCP ~p closed on rst", [self()]),
     % XXX notify owner  tcp_closed?
-    State2 = detach_owner(State),
-    set_state(closed, State2).
+    State2 = set_state(closed, State),
+    process_users(State2).
 
 % in-window check  RFC 793 3.3. (p.26)
 accept_check(#tcp{syn = 0, rst = 0}, _, #tcp_state{rcv_nxt = undefined}) ->
