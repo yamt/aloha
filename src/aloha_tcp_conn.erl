@@ -142,17 +142,9 @@ handle_call({recv, Len, Timeout}, From,
     State4 = tcp_output(State3),
     noreply(State4);
 handle_call(peername, _From, #tcp_state{template = Tmpl} = State) ->
-    {Addr, Port} = case Tmpl of
-        [_, #ip{dst = A}, #tcp{dst_port = P}] -> {A, P};
-        [_, #ipv6{dst = A}, #tcp{dst_port = P}] -> {A, P}
-    end,
-    reply({ok, {aloha_addr:to_ip(Addr), Port}}, State);
+    reply({ok, peername(Tmpl)}, State);
 handle_call(sockname, _From, #tcp_state{template = Tmpl} = State) ->
-    {Addr, Port} = case Tmpl of
-        [_, #ip{src = A}, #tcp{src_port = P}] -> {A, P};
-        [_, #ipv6{src = A}, #tcp{src_port = P}] -> {A, P}
-    end,
-    reply({ok, {aloha_addr:to_ip(Addr), Port}}, State);
+    reply({ok, sockname(Tmpl)}, State);
 handle_call({controlling_process, _}, _From,
             #tcp_state{owner = none} = State) ->
     reply(ok, State);
@@ -827,6 +819,24 @@ setopts([H|Rest], State, Orig) ->
 
 setopts(Opts, State) ->
     setopts(Opts, State, State).
+
+%% peername
+
+peername(Tmpl) ->
+    {Addr, Port} = case Tmpl of
+        [_, #ip{dst = A}, #tcp{dst_port = P}] -> {A, P};
+        [_, #ipv6{dst = A}, #tcp{dst_port = P}] -> {A, P}
+    end,
+    {aloha_addr:to_ip(Addr), Port}.
+
+%% sockname
+
+sockname(Tmpl) ->
+    {Addr, Port} = case Tmpl of
+        [_, #ip{src = A}, #tcp{src_port = P}] -> {A, P};
+        [_, #ipv6{src = A}, #tcp{src_port = P}] -> {A, P}
+    end,
+    {aloha_addr:to_ip(Addr), Port}.
 
 %% misc
 
