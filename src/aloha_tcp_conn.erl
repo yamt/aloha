@@ -161,6 +161,11 @@ handle_call({controlling_process, NewOwner}, {OldOwner, _},
 handle_call(close, {Pid, _}, #tcp_state{owner = Owner} = State) ->
     lager:info("TCP user close ~p from ~p owner ~p", [self(), Pid, Owner]),
     reply(ok, close(State));
+handle_call(force_close, {Pid, _}, #tcp_state{owner = Owner} = State) ->
+    lager:info("TCP force close ~p from ~p owner ~p", [self(), Pid, Owner]),
+    State2 = close(State),
+    State3 = set_state(closed, State2),
+    reply(ok, State3);
 handle_call({setopts, Opts}, _From, State) ->
     {Ret, State2} = setopts(proplists:unfold(Opts), State),
     State3 = deliver_to_app(State2),
@@ -607,7 +612,8 @@ controlling_process({aloha_socket, Pid} = Sock, NewOwner) ->
         {OldOwner, _} = gen_server:call(Pid, get_owner_info),
         controlling_process(Sock, OldOwner, NewOwner)
     catch
-        error:noproc -> ok
+        exit:{noproc, _} -> ok;
+        exit:{normal, _} -> ok
     end.
 
 controlling_process(_, none, _) ->
@@ -795,6 +801,8 @@ close(State) ->
     State3 = shutdown_sender(State2),
     detach_owner(State3).
 
+detach_owner(#tcp_state{owner = none} = State) ->
+    State;
 detach_owner(#tcp_state{owner = Owner} = State) ->
     unlink(Owner),
     State#tcp_state{owner = none}.

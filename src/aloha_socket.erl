@@ -27,6 +27,7 @@
 -export([listen/2, accept/1]).
 -export([controlling_process/2, setopts/2, send/2, recv/2, recv/3, close/1,
          shutdown/2, peername/1, sockname/1]).
+-export([force_close/1]).
 
 listen(Port, Opts) ->
     lager:debug("aloha_socket:listen ~p ~p", [Port, Opts]),
@@ -87,13 +88,20 @@ sockname({aloha_socket, SockPid}) ->
 sockname(Sock) ->
     inet:sockname(Sock).
 
+force_close({aloha_socket, SockPid}) ->
+    call(SockPid, force_close).
+
 call(Pid, Req) ->
     try
         gen_server:call(Pid, Req, infinity)
     catch
-        exit:{noproc, _} -> {error, closed};
-        exit:{normal, _} -> {error, closed};
+        exit:{noproc, Reason} ->
+            lager:info("~p exit noproc reason ~p", [Pid, Reason]),
+            {error, closed};
+        exit:{normal, Reason} ->
+            lager:info("~p exit normal reason ~p", [Pid, Reason]),
+            {error, closed};
         exit:Reason ->
-            lager:info("exit reason ~p", [Reason]),
+            lager:info("~p exit reason ~p", [Pid, Reason]),
             {error, closed}
     end.
