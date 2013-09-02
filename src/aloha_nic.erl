@@ -86,8 +86,10 @@ enqueue(Msg) ->
     gen_server:cast(self(), Msg).
 
 send_packet(Pkt) ->
-    gen_server:cast(self(), {send_packet, Pkt}).
+    send_packet(Pkt, self()).
 
+send_packet(Pkt, Pid) when is_pid(Pid) ->
+    gen_server:cast(Pid, {send_packet, Pkt});
 send_packet(BinPkt, Backend) when is_binary(BinPkt) ->
     {M, F, A} = Backend,
     apply(M, F, [BinPkt|A]);
