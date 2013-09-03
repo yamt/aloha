@@ -363,10 +363,24 @@ process_input(#tcp{} = Tcp, Data, State) ->
             State3 = update_state_on_flags(Tcp2, State2),
             update_receiver(Tcp2, Data2, State3);
         false ->
-            lager:info("TCP ~p drop out of window segment "
-                       "~p seg_len ~p state ~p",
-                       [self(), pp(Tcp), seg_len(Tcp, Data), pp(State)]),
-            {true, State}
+            case {State#tcp_state.owner, seg_len(Tcp, Data)} of
+                {none, Len} when Len =/= 0 ->
+                    % this can be a window probe sent to a closed socket. 
+                    % note that the peer doesn't have a way to distinguish
+                    % half-close and full-close on our side.
+                    lager:info("TCP ~p reset out of window segment "
+                               "~p seg_len ~p state ~p",
+                               [self(), pp(Tcp), seg_len(Tcp, Data),
+                                pp(State)]),
+                    send_rst(State),
+                    {false, State};
+                _ ->
+                    lager:info("TCP ~p drop out of window segment "
+                               "~p seg_len ~p state ~p",
+                               [self(), pp(Tcp), seg_len(Tcp, Data),
+                                pp(State)]),
+                    {true, State}
+            end
     end.
 
 setup_ack(Nxt, #tcp_state{rcv_nxt = Nxt} = State) ->
