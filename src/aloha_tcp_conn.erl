@@ -373,7 +373,7 @@ process_input(#tcp{} = Tcp, Data, State) ->
                                [self(), pp(Tcp), seg_len(Tcp, Data),
                                 pp(State)]),
                     send_rst(State),
-                    {false, State};
+                    {false, set_state(closed, State)};
                 _ ->
                     lager:info("TCP ~p drop out of window segment "
                                "~p seg_len ~p state ~p",
