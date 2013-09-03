@@ -166,12 +166,12 @@ connect(NS, RAddr0, RPort, L1Src, Backend, Opts) ->
     {ok, Pid} = aloha_tcp_conn:start(Opts3),
     ok = gen_server:call(Pid, connect),
     Sock = {aloha_socket, Pid},
-    connect_wait(Sock),
-    {ok, Sock}.
+    connect_wait(Sock).
 
 connect_wait(Sock) ->
+    lager:info("~p waiting active connect completion", [self()]),
     receive
-        {aloha_tcp_connected, Sock} -> ok
+        {aloha_tcp_connected, Sock} -> {ok, Sock}
     end.
 
 make_template(Proto, Dst, DstPort, Src, SrcPort, L1Src) ->
