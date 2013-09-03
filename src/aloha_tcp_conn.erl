@@ -463,25 +463,28 @@ rcv_wnd(#tcp_state{rcv_nxt = Nxt, rcv_adv = Adv} = Tcp) ->
 % window size to advertise
 % RFC 1122 4.2.3.3 receiver side SWS avoidance
 choose_rcv_wnd(#tcp_state{rcv_adv = undefined} = State) ->
-    rcv_buf_space(State);
+    {false, min(rcv_buf_space(State), 65535)};
 choose_rcv_wnd(#tcp_state{rcv_nxt = Nxt, rcv_adv = Adv} = State) ->
-    AdvWnd = case ?SEQ_LT(Nxt, Adv) of
+    AdvWnd = case ?SEQ_LTE(Nxt, Adv) of
         true ->
             ?SEQ(Adv - Nxt);
         false ->
             % we failed to advertise window update but accepted segments
-            lager:info("TCP ~p rcv_adv < rcv_nxt", [self()]),
+            lager:info("TCP ~p rcv_adv ~p < rcv_nxt ~p", [self(), Adv, Nxt]),
             0
     end,
-    choose_rcv_wnd(rcv_buf_space(State), AdvWnd, State).
+    choose_rcv_wnd(min(rcv_buf_space(State), 65535), AdvWnd, State).
 
+choose_rcv_wnd(0, _, _) ->
+    {false, 0};  % shutdown_receiver closed the receive buffer
 choose_rcv_wnd(NextWnd, AdvWnd,
                #tcp_state{rcv_buf_size = BufSize, rcv_mss = MSS})
         when NextWnd - AdvWnd >= BufSize div 2 orelse
              NextWnd - AdvWnd >= MSS ->
-    NextWnd;
+    lager:info("TCP ~p window update ~p -> ~p", [self(), AdvWnd, NextWnd]),
+    {true, NextWnd};
 choose_rcv_wnd(_, AdvWnd, _) ->
-    AdvWnd.
+    {false, AdvWnd}.
 
 tcp_output(State) ->
     tcp_output(false, State).
@@ -518,13 +521,15 @@ tcp_output(CanProbe,
     end,
     {Syn2, Data2, Fin2, SndNxt} =
         aloha_tcp_seq:trim(Syn, Data, Fin, SndNxt, SndNxt, SndNxt + SndWnd2),
-    case AckNow orelse Syn2 =:= 1 orelse Fin2 =:= 1 orelse Data2 =/= <<>> of
+    {UpdateWin, Win} = choose_rcv_wnd(State),
+    case AckNow orelse Syn2 =:= 1 orelse Fin2 =:= 1 orelse Data2 =/= <<>>
+                orelse UpdateWin of
         true ->
             State2 = cancel_delack(State),
-            State3 = build_and_send_packet(Syn2, Data2, Fin2, State2),
+            State3 = build_and_send_packet(Syn2, Data2, Fin2, Win, State2),
             State4 = might_renew_timer(true, NeedProbe, State3),
             tcp_output(State4);  % burst transmit
-        _ ->
+        false ->
             might_renew_timer(false, NeedProbe, State)
     end.
 
@@ -554,14 +559,13 @@ push(_, Data, _, #tcp_state{snd_una = Una, snd_nxt = Nxt, snd_buf = Buf})
     when ?SEQ(Nxt - Una) + byte_size(Data) =:= byte_size(Buf) -> 1;
 push(_, _, _, _) -> 0.
 
-build_and_send_packet(Syn, Data, Fin,
+build_and_send_packet(Syn, Data, Fin, Win,
                       #tcp_state{snd_nxt = SndNxt,
                                  rcv_nxt = RcvNxt,
                                  backend = Backend,
                                  rcv_mss = RMSS,
                                  template = [Ether, Ip, TcpTmpl],
                                  namespace = NS} = State) ->
-    Win = min(choose_rcv_wnd(State), 65535),
     {Ack, Ackno, Adv} = case RcvNxt of
         undefined -> {0, 0, undefined};
         V ->         {1, V, ?SEQ(V + Win)}
