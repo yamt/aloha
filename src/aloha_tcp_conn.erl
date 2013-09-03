@@ -322,6 +322,7 @@ update_state_on_close(State) ->
 
 % incoming rst/syn/fin
 update_state_on_flags(#tcp{rst = 1}, #tcp_state{} = State) ->
+    lager:info("TCP ~p got rst", [self()]),
     reset(State);
 update_state_on_flags(#tcp{syn = 1, fin = 0},
                       #tcp_state{state = syn_sent} = State) ->
@@ -345,10 +346,10 @@ update_state_on_flags(_, State) ->
     State.
 
 reset(State) ->
-    lager:info("TCP ~p closed on rst", [self()]),
-    % XXX notify owner  tcp_closed?
-    State2 = set_state(closed, State),
-    process_users(State2).
+    lager:info("TCP ~p reset", [self()]),
+    State2 = deliver_to_app({tcp_closed, self_socket()}, State),
+    State3 = set_state(closed, State2),
+    process_users(State3).
 
 % in-window check  RFC 793 3.3. (p.26)
 accept_check(#tcp{syn = 0, rst = 0}, _, #tcp_state{rcv_nxt = undefined}) ->
@@ -375,7 +376,7 @@ process_input(#tcp{} = Tcp, Data, State) ->
                                [self(), pp(Tcp), seg_len(Tcp, Data),
                                 pp(State)]),
                     send_rst(State),
-                    {false, set_state(closed, State)};
+                    {false, reset(State)};
                 _ ->
                     lager:info("TCP ~p drop out of window segment "
                                "~p seg_len ~p state ~p",
@@ -410,7 +411,7 @@ update_receiver(#tcp{seqno = Seq, rst = 0} = Tcp, Data,
     lager:info("TCP ~p sending rst for ~p datalen ~p state ~p",
                [self(), pp(Tcp), byte_size(Data), pp(State)]),
     send_rst(State),
-    {false, set_state(closed, State)};
+    {false, reset(State)};
 update_receiver(#tcp{seqno = Seq, fin = Fin} = Tcp, Data,
                 #tcp_state{rcv_nxt = Seq} = State) ->
     lager:debug("appending ~p bytes to rcv_buf ~p", [byte_size(Data), Data]),
