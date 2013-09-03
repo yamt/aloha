@@ -33,8 +33,10 @@
 
 -export([tcp_self_connect/1]).
 -export([tcp_echo/1]).
+-export([tcp_bulk_transfer/1]).
 -export([tcp_close/1]).
 
+-define(DISCARD_PORT, 9).
 -define(ECHO_PORT, 7).
 -define(CLOSE_PORT, 5000).
 -define(LOCAL_PORT, 8888).
@@ -58,16 +60,20 @@ groups() ->
     Tests = [
         tcp_self_connect,
         tcp_echo,
+        tcp_bulk_transfer,
         tcp_close
     ],
-    [{loopback, [parallel], [{group, ipv4}, {group, ipv6}]},
+    [{loopback, [parallel], [
+        {group, ipv4},
+        {group, ipv6}
+     ]},
      {ipv4, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests},
      {ipv6, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests}].
 
 init_per_suite(Config) ->
-    %lager:start(),
-    %lager:set_loglevel(lager_file_backend, "console.log", warning),
-    %application:start(sasl),
+    lager:start(),
+    lager:set_loglevel(lager_file_backend, "console.log", warning),
+    application:start(sasl),
     Owner = proc_lib:spawn(fun() ->
         aloha_tables:init_tables(),
         receive
@@ -94,6 +100,7 @@ init_per_group(loopback, Config) ->
         proc_lib:spawn(fun() -> tcp_server(?MODULE, Port, Fun) end)
     end, [
         {?ECHO_PORT, fun echo_loop/1},
+        {?DISCARD_PORT, fun discard_loop/1},
         {?CLOSE_PORT, fun(Sock) -> aloha_socket:close(Sock) end}
     ]),
     [{loopback, Pid}, {servers, Servers}|Config];
@@ -112,23 +119,21 @@ end_per_group(ipv6, _Config) ->
     ok.
 
 tcp_self_connect(Config) ->
-    Proto = ?config(proto, Config),
     IP = ?config(ip, Config),
-    tcp_send_and_recv(Proto, IP, ?SELF_PORT,
-                             IP, ?SELF_PORT, Config).
+    tcp_send_and_recv(IP, ?SELF_PORT, IP, ?SELF_PORT, Config).
 
 tcp_echo(Config) ->
-    Proto = ?config(proto, Config),
     IP = ?config(ip, Config),
-    tcp_send_and_recv(Proto, IP, ?ECHO_PORT,
-                             IP, ?LOCAL_PORT, Config).
+    tcp_send_and_recv(IP, ?ECHO_PORT, IP, ?LOCAL_PORT, Config).
+
+tcp_bulk_transfer(Config) ->
+    IP = ?config(ip, Config),
+    tcp_send(IP, ?DISCARD_PORT, IP, ?LOCAL_PORT, Config).
 
 tcp_close(Config) ->
-    Proto = ?config(proto, Config),
     IP = ?config(ip, Config),
     try
-        tcp_send_and_recv(Proto, IP, ?CLOSE_PORT,
-                                 IP, ?LOCAL_PORT, Config)
+        tcp_send_and_recv(IP, ?CLOSE_PORT, IP, ?LOCAL_PORT, Config)
     catch
         error:{badmatch, {error, closed}} = E ->
             ct:pal("expected exception ~p", [E]),
@@ -139,8 +144,7 @@ make_data() ->
     iolist_to_binary(lists:map(fun(_) -> <<"hello!">> end,
                      lists:seq(1, 3000))).
 
-tcp_send_and_recv(_Proto, RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
-                  Config) ->
+tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
     Nic = ?config(loopback, Config),
     {ok, Opts} = gen_server:call(Nic, getopts),
     Addr = proplists:get_value(addr, Opts),
@@ -156,11 +160,9 @@ tcp_send_and_recv(_Proto, RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
     {ok, PeerName} = aloha_socket:peername(Sock),
     SockName = {aloha_addr:to_ip(LocalIPAddr), LocalPort},
     {ok, SockName} = aloha_socket:sockname(Sock),
-    ok = aloha_socket:send(Sock, Msg),
-    ok = aloha_socket:shutdown(Sock, write),
-    {ok, Msg} = aloha_socket:recv(Sock, MsgSize),
-    {error, closed} = aloha_socket:recv(Sock, MsgSize),
-    ok = aloha_socket:close(Sock),
+    {Sock, Msg}.
+
+tcp_cleanup(Sock) ->
     ct:pal("cleaning up ..."),
     % don't bother to wait for 2MSL
     case aloha_socket:force_close(Sock) of
@@ -169,6 +171,27 @@ tcp_send_and_recv(_Proto, RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
     end,
     {aloha_socket, SockPid} = Sock,
     wait(SockPid).
+
+tcp_send_and_recv(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
+    {Sock, Msg} = tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
+                              Config),
+    MsgSize = byte_size(Msg),
+    ok = aloha_socket:send(Sock, Msg),
+    ok = aloha_socket:shutdown(Sock, write),
+    {ok, Msg} = aloha_socket:recv(Sock, MsgSize),
+    {error, closed} = aloha_socket:recv(Sock, MsgSize),
+    ok = aloha_socket:close(Sock),
+    tcp_cleanup(Sock).
+
+tcp_send(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
+    {Sock, Msg} = tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
+                              Config),
+    MsgSize = byte_size(Msg),
+    ok = aloha_socket:send(Sock, Msg),
+    ok = aloha_socket:shutdown(Sock, write),
+    {error, closed} = aloha_socket:recv(Sock, MsgSize),
+    ok = aloha_socket:close(Sock),
+    tcp_cleanup(Sock).
 
 kill_and_wait(Pid) when is_pid(Pid) ->
     kill_and_wait([Pid]);
@@ -208,6 +231,14 @@ echo_loop(Sock) ->
         {ok, Data} ->
             ok = aloha_socket:send(Sock, Data),
             echo_loop(Sock);
+        {error, closed} ->
+            ok = aloha_socket:close(Sock)
+    end.
+
+discard_loop(Sock) ->
+    case aloha_socket:recv(Sock, 0) of
+        {ok, _Data} ->
+            discard_loop(Sock);
         {error, closed} ->
             ok = aloha_socket:close(Sock)
     end.
