@@ -465,7 +465,15 @@ rcv_wnd(#tcp_state{rcv_nxt = Nxt, rcv_adv = Adv} = Tcp) ->
 choose_rcv_wnd(#tcp_state{rcv_adv = undefined} = State) ->
     rcv_buf_space(State);
 choose_rcv_wnd(#tcp_state{rcv_nxt = Nxt, rcv_adv = Adv} = State) ->
-    choose_rcv_wnd(rcv_buf_space(State), ?SEQ(Adv - Nxt), State).
+    AdvWnd = case ?SEQ_LT(Nxt, Adv) of
+        true ->
+            ?SEQ(Adv - Nxt);
+        false ->
+            % we failed to advertise window update but accepted segments
+            lager:info("TCP ~p rcv_adv < rcv_nxt", [self()]),
+            0
+    end,
+    choose_rcv_wnd(rcv_buf_space(State), AdvWnd, State).
 
 choose_rcv_wnd(NextWnd, AdvWnd,
                #tcp_state{rcv_buf_size = BufSize, rcv_mss = MSS})
