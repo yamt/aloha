@@ -116,7 +116,9 @@ noreply(false, true, State) ->
 noreply(false, false, State) ->
     {noreply, State}.
 
-handle_call(connect, _From, #tcp_state{state = closed} = State) ->
+handle_call(connect, {Pid, _},
+            #tcp_state{owner = Pid, state = closed} = State) ->
+    lager:info("TCP ~p active connect owner ~p", [self(), Pid]),
     State2 = State#tcp_state{snd_syn = 1},
     State3 = set_state(syn_sent, State2),
     State4 = tcp_output(State3),
