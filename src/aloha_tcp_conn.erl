@@ -561,7 +561,7 @@ build_and_send_packet(Syn, Data, Fin,
                                  rcv_mss = RMSS,
                                  template = [Ether, Ip, TcpTmpl],
                                  namespace = NS} = State) ->
-    Win = choose_rcv_wnd(State),
+    Win = min(choose_rcv_wnd(State), 65535),
     {Ack, Ackno, Adv} = case RcvNxt of
         undefined -> {0, 0, undefined};
         V ->         {1, V, ?SEQ(V + Win)}
