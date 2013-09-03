@@ -386,9 +386,11 @@ update_receiver(#tcp{syn = 1, seqno = Seq}, <<>>,
                 #tcp_state{rcv_nxt = undefined, state = TcpState} = State) ->
     true = TcpState =:= established orelse TcpState =:= syn_received,
     {true, State#tcp_state{rcv_nxt = Seq + 1}};
-update_receiver(#tcp{seqno = Seq, rst = 0} = _Tcp, _Data,
+update_receiver(#tcp{seqno = Seq, rst = 0} = Tcp, Data,
                 #tcp_state{rcv_nxt = Seq, owner = none} = State)
-                when data =/= <<>> ->
+                when Data =/= <<>> ->
+    lager:info("sending rst for ~p datalen ~p state ~p",
+               [pp(Tcp), byte_size(Data), pp(State)]),
     send_rst(State),
     {false, set_state(closed, State)};
 update_receiver(#tcp{seqno = Seq, fin = Fin} = Tcp, Data,
