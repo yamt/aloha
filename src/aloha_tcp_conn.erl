@@ -445,11 +445,12 @@ next_state_on_close(syn_sent) -> closed;
 next_state_on_close(close_wait) -> last_ack;
 next_state_on_close(Other) -> Other.
 
-% enqueue fin except the case of syn_sent -> closed
-enqueue_fin(#tcp_state{state = closed} = State) ->
-    State;
+enqueue_fin(#tcp_state{state = fin_wait_1} = State) ->
+    State#tcp_state{snd_fin = 1};
+enqueue_fin(#tcp_state{state = last_ack} = State) ->
+    State#tcp_state{snd_fin = 1};
 enqueue_fin(State) ->
-    State#tcp_state{snd_fin = 1}.
+    State.
 
 rcv_buf_space(#tcp_state{rcv_buf_size = BufSize, rcv_buf = Buf}) ->
     max(0, BufSize - byte_size(Buf)).
