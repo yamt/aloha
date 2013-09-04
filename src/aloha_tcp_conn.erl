@@ -595,7 +595,15 @@ build_and_send_packet(Syn, Data, Fin, Win,
                 [byte_size(Data), pp(Tcp), pp(State)]),
     Pkt = [Ether, Ip, Tcp, Data],
     aloha_tcp:send_packet(Pkt, NS, Backend),
+    adv_win_check(Adv, State),
     State#tcp_state{snd_nxt = calc_next_seq(Tcp, Data), rcv_adv = Adv}.
+
+adv_win_check(_, #tcp_state{rcv_adv = undefined}) ->
+    ok;
+adv_win_check(New, #tcp_state{rcv_adv = Cur}) when ?SEQ_LT(New, Cur) ->
+    lager:info("shrinking window cur ~p new ~p", [Cur, New]);
+adv_win_check(_, _) ->
+    ok.
 
 send_rst(#tcp_state{snd_nxt = SndNxt,
                     rcv_nxt = RcvNxt,
