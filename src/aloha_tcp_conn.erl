@@ -390,7 +390,12 @@ process_input(#tcp{} = Tcp, Data, State) ->
                                "~p seg_len ~p state ~p",
                                [self(), pp(Tcp), seg_len(Tcp, Data),
                                 pp(State)]),
-                    {true, State}
+                    % do not send an ack as we didn't queue the segment.
+                    % sending ack here causes peer's fast retransmission
+                    % which assumes we hold the segment in the queue.
+                    % see also RFC 1122 4.2.2.21
+                    % {true, State}
+                    {false, State}
             end
     end.
 
