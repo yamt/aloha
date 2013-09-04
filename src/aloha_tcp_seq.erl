@@ -76,9 +76,23 @@ trim(Syn, Data, Fin, Seq, _WinStart, _WinEnd) ->
 trim(Syn, Data, Fin, Seq, WinStart) ->
     trim(Syn, Data, Fin, Seq, WinStart, WinStart + 999999).  % XXX
 
-accept_check(_, 1, undefined, _) ->  % accept syn
+% RFC 793 Page 26
+%
+% Segment Receive  Test
+% Length  Window
+% ------- -------  -------------------------------------------
+%
+%    0       0     SEG.SEQ = RCV.NXT
+%
+%    0      >0     RCV.NXT =< SEG.SEQ < RCV.NXT+RCV.WND
+%
+%   >0       0     not acceptable
+%
+%   >0      >0     RCV.NXT =< SEG.SEQ < RCV.NXT+RCV.WND
+%               or RCV.NXT =< SEG.SEQ+SEG.LEN-1 < RCV.NXT+RCV.WND
+accept_check(_, 1, undefined, _) ->  % special case: accept syn
     true;
-accept_check(_, 0, undefined, _) ->  % or rst
+accept_check(_, 0, undefined, _) ->  % special case: or rst
     true;
 accept_check(Seq, 0, RcvNxt, 0) ->
     Seq =:= RcvNxt;
@@ -88,7 +102,7 @@ accept_check(_, _, _, 0) ->
     false;
 accept_check(Seq, SegLen, RcvNxt, RcvWnd) ->
     seq_between(RcvNxt, Seq, RcvNxt + RcvWnd) orelse
-    seq_between(RcvNxt, Seq + SegLen + 1, RcvNxt + RcvWnd).
+    seq_between(RcvNxt, Seq + SegLen - 1, RcvNxt + RcvWnd).
 
 %% debug
 
@@ -114,5 +128,54 @@ trim_test() ->
                  trim(1, <<"hoge">>, 1, 100, 106, 106)),
     ?assertEqual({0, <<"oge">>, 1, 1},
                  trim(1, <<"hoge">>, 1, 16#ffffffff, 1, 5)).
+
+accept_check_test() ->
+    % accept_check(Seq, SegLen, RcvNxt, RcvWnd) -> true|false
+
+    % RFC 793 Page 26  (and Page 69)
+    %
+    % Segment Receive  Test
+    % Length  Window
+    % ------- -------  -------------------------------------------
+    %
+    %    0       0     SEG.SEQ = RCV.NXT
+
+    ?assertEqual(false, accept_check(1999, 0, 2000, 0)),
+    ?assertEqual(true,  accept_check(2000, 0, 2000, 0)),
+    ?assertEqual(false, accept_check(2001, 0, 2000, 0)),
+
+    %    0      >0     RCV.NXT =< SEG.SEQ < RCV.NXT+RCV.WND
+
+    ?assertEqual(false, accept_check(1999, 0, 2000, 1000)),
+    ?assertEqual(true,  accept_check(2000, 0, 2000, 1000)),
+    ?assertEqual(true,  accept_check(2999, 0, 2000, 1000)),
+    ?assertEqual(false, accept_check(3000, 0, 2000, 1000)),
+
+    %   >0       0     not acceptable
+
+    ?assertEqual(false, accept_check(1999, 1, 2000, 0)),
+    ?assertEqual(false, accept_check(2000, 1, 2000, 0)),
+    ?assertEqual(false, accept_check(2001, 1, 2000, 0)),
+
+    %   >0      >0     RCV.NXT =< SEG.SEQ < RCV.NXT+RCV.WND
+    %               or RCV.NXT =< SEG.SEQ+SEG.LEN-1 < RCV.NXT+RCV.WND
+
+    ?assertEqual(false, accept_check(1999, 1, 2000, 1000)),
+    ?assertEqual(true,  accept_check(1999, 2, 2000, 1000)),
+    ?assertEqual(true,  accept_check(2000, 1, 2000, 1000)),
+    ?assertEqual(true,  accept_check(2000, 2, 2000, 1000)),
+    ?assertEqual(true,  accept_check(2999, 1, 2000, 1000)),
+    ?assertEqual(true,  accept_check(2999, 2, 2000, 1000)),
+    ?assertEqual(false, accept_check(3000, 1, 2000, 1000)),
+    ?assertEqual(false, accept_check(3000, 2, 2000, 1000)),
+
+    ?assertEqual(true,  accept_check(2000,  999, 2000, 1000)),
+    ?assertEqual(true,  accept_check(2000, 1000, 2000, 1000)),
+    ?assertEqual(true,  accept_check(2000, 1001, 2000, 1000)),
+
+    ?assertEqual(true,  accept_check(1999,  999, 2000, 1000)),
+    ?assertEqual(true,  accept_check(1999, 1000, 2000, 1000)),
+    ?assertEqual(true,  accept_check(1999, 1001, 2000, 1000)),
+    ?assertEqual(false, accept_check(1999, 1002, 2000, 1000)).
 
 -endif.
