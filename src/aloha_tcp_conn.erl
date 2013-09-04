@@ -428,8 +428,11 @@ update_receiver(#tcp{seqno = Seq, fin = Fin} = Tcp, Data,
     {AckNow, State2} = setup_ack(Nxt, State),
     State3 = State2#tcp_state{rcv_nxt = Nxt, rcv_buf = RcvBuf},
     {AckNow orelse Fin =:= 1, State3};
-update_receiver(_, _, State) ->
+update_receiver(#tcp{seqno = Seqno} = Tcp, Data,
+                #tcp_state{rcv_nxt = Nxt} = State) ->
     % drop out of order segment
+    lager:info("TCP ~p drop out of order segment rcv_nxt ~p seqno ~p seglen ~p",
+        [self(), Nxt, Seqno, seg_len(Tcp, Data)]),
     {true, State}.
 
 segment_arrival({#tcp{ack = 0, syn = 1} = Tcp, Data}, State)
