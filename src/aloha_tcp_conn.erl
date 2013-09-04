@@ -265,8 +265,7 @@ process_ack(#tcp{ack = 1, ackno = Ack, window = Wnd},
     State2 = update_state_on_ack(Syn2 =/= Syn, Fin2 =/= Fin, State),
     State3 = State2#tcp_state{snd_una = Ack, snd_syn = Syn2, snd_buf = SndBuf2,
                               snd_fin = Fin2, snd_wnd = Wnd},
-    State4 = process_writers(State3),
-    tcp_output(State4);
+    process_writers(State3);
 process_ack(#tcp{ack = 0}, State) ->
     State;  % rst, (retransmitted) syn
 process_ack(#tcp{ackno = Ack, window = Wnd} = Tcp,
