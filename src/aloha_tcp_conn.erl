@@ -256,12 +256,12 @@ calc_next_seq(#tcp{seqno = Seq} = Tcp, Data) ->
 % "check the ACK field"
 %
 % advance SND.UNA and truncate send buffer
-% SND.UNA < SEG.ACK =< SND.NXT
+% SND.UNA <= SEG.ACK =< SND.NXT  see RFC 1122 4.2.2.20 (g)
 process_ack(#tcp{ack = 1, ackno = Ack, window = Wnd},
             #tcp_state{snd_una = Una, snd_nxt = Nxt,
                        snd_syn = Syn, snd_buf = SndBuf,
                        snd_fin = Fin} = State) when
-            ?SEQ_LT(Una, Ack) andalso ?SEQ_LTE(Ack, Nxt) ->
+            ?SEQ_LTE(Una, Ack) andalso ?SEQ_LTE(Ack, Nxt) ->
     lager:info("TCP ~p ACKed ~p-~p", [self(), Una, Ack]),
     {Syn2, SndBuf2, Fin2, Ack} = aloha_tcp_seq:trim(Syn, SndBuf, Fin, Una, Ack),
     State2 = update_state_on_ack(Syn2 =/= Syn, Fin2 =/= Fin, State),
@@ -274,11 +274,6 @@ process_ack(#tcp{ackno = Ack, window = Wnd} = Tcp,
             #tcp_state{snd_una = Ack, snd_wnd = Wnd} = State) ->
     lager:debug("dup ack ~p ~p", [pp(Tcp), pp(State)]),
     State;
-process_ack(#tcp{ackno = Ack, window = Wnd} = Tcp,
-            #tcp_state{snd_una = Ack} = State) ->
-    lager:debug("TCP ~p pure window update ~p ~p",
-                [self(), pp(Tcp), pp(State)]),
-    State#tcp_state{snd_wnd = Wnd};
 process_ack(Tcp, State) ->
     lager:info("TCP ~p out of range ack ~p ~p", [self(), pp(Tcp), pp(State)]),
     State.
