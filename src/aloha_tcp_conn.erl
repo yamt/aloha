@@ -292,7 +292,7 @@ update_sender(Tcp, State) ->
     update_mss(Tcp, State2).
 
 established(#tcp_state{owner = Owner} = State) ->
-    lager:info("TCp ~p connected owner ~p", [self(), Owner]),
+    lager:info("TCP ~p connected owner ~p", [self(), Owner]),
     % notify the listener socket process or connecting process
     Owner ! {aloha_tcp_connected, self_socket()},
     set_state(established, State).
