@@ -253,6 +253,8 @@ seg_len(#tcp{syn = Syn, fin = Fin}, Data) ->
 calc_next_seq(#tcp{seqno = Seq} = Tcp, Data) ->
     ?SEQ(Seq + seg_len(Tcp, Data)).
 
+% "check the ACK field"
+%
 % advance SND.UNA and truncate send buffer
 % SND.UNA < SEG.ACK =< SND.NXT
 process_ack(#tcp{ack = 1, ackno = Ack, window = Wnd},
@@ -320,6 +322,9 @@ update_state_on_close(State) ->
     set_state(next_state_on_close(State#tcp_state.state), State).
 
 % incoming rst/syn/fin
+% "check the RST bit"
+% "check the SYN bit"
+% "check the FIN bit"
 update_state_on_flags(#tcp{rst = 1}, #tcp_state{} = State) ->
     lager:info("TCP ~p got rst", [self()]),
     reset(State);
@@ -350,6 +355,8 @@ reset(State) ->
     State3 = set_state(closed, State2),
     process_users(State3).
 
+% "check sequence number"
+%
 % in-window check  RFC 793 3.3. (p.26)
 %
 % NetBSD accepts a segement after window if data portion of the segment
@@ -367,11 +374,17 @@ accept_check(#tcp{seqno = Seq} = Tcp, Data,
     aloha_tcp_seq:accept_check(Seq, seg_len(Tcp, Data), RcvNxt, rcv_wnd(State)).
 
 process_input(#tcp{} = Tcp, Data, State) ->
+    % "check sequence number"
     case accept_check(Tcp, Data, State) of
         true ->
             {Tcp2, Data2} = trim(Tcp, Data, State),
+            % "check the ACK field"
             State2 = update_sender(Tcp2, State),
+            % "check the RST bit"
+            % "check the SYN bit"
+            % "check the FIN bit"
             State3 = update_state_on_flags(Tcp2, State2),
+            % "process the segment text"
             update_receiver(Tcp2, Data2, State3);
         false ->
             case {State#tcp_state.owner, seg_len(Tcp, Data)} of
@@ -414,6 +427,7 @@ cancel_delack(#tcp_state{delack_timer = TRef} = State) ->
     erlang:cancel_timer(TRef),
     State#tcp_state{delack_timer = undefined}.
 
+% "process the segment text"
 update_receiver(#tcp{syn = 1, seqno = Seq}, <<>>,
                 #tcp_state{rcv_nxt = undefined, state = TcpState} = State) ->
     true = TcpState =:= established orelse TcpState =:= syn_received,
