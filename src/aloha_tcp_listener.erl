@@ -68,6 +68,9 @@ handle_info({aloha_tcp_connected, {aloha_socket, Sock}}, State) ->
     lager:info("ready to accept ~p", [Sock]),
     State2 = add_socket(Sock, State),
     {noreply, process_accept(State2)};
+handle_info({tcp_error, Sock, econnreset}, State) ->
+    aloha_socket:close(Sock),
+    {noreply, State};
 handle_info(Info, State) ->
     lager:info("handle_info: ~p", [Info]),
     {noreply, State}.

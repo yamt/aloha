@@ -316,13 +316,9 @@ update_state_on_ack(_, _, State) ->
 update_state_on_close(State) ->
     set_state(next_state_on_close(State#tcp_state.state), State).
 
-% incoming rst/syn/fin
-% "check the RST bit"
+% incoming syn/fin
 % "check the SYN bit"
 % "check the FIN bit"
-update_state_on_flags(#tcp{rst = 1}, #tcp_state{} = State) ->
-    lager:info("TCP ~p got rst", [self()]),
-    reset(State);
 update_state_on_flags(#tcp{syn = 1, fin = 0},
                       #tcp_state{state = syn_sent} = State) ->
     set_state(syn_received, State);
@@ -344,11 +340,15 @@ update_state_on_flags(#tcp{syn = 0, fin = 1},
 update_state_on_flags(_, State) ->
     State.
 
-reset(State) ->
-    lager:info("TCP ~p reset", [self()]),
-    State2 = deliver_to_app({tcp_closed, self_socket()}, State),
-    State3 = set_state(closed, State2),
-    process_users(State3).
+reset(#tcp_state{owner = none} = State) ->
+    lager:info("TCP ~p reset no owner", [self()]),
+    State2 = set_state(closed, State),
+    process_users(State2);
+reset(#tcp_state{owner = Owner} = State) ->
+    lager:info("TCP ~p reset owner ~p", [self(), Owner]),
+    Owner ! {tcp_error, self_socket(), econnreset},  % XXXshould queue?
+    State2 = set_state(closed, State),
+    process_users(State2).
 
 % "check sequence number"
 %
@@ -368,6 +368,13 @@ accept_check(#tcp{seqno = Seq} = Tcp, Data,
              #tcp_state{rcv_nxt = RcvNxt} = State) ->
     aloha_tcp_seq:accept_check(Seq, seg_len(Tcp, Data), RcvNxt, rcv_wnd(State)).
 
+process_input(#tcp{rst = 1} = Tcp, Data, State) ->
+    % handle rst
+    % either drop or reset the connection
+    case accept_check(Tcp, Data, State) of
+        true -> {false, reset(State)};
+        false -> {false, State}
+    end;
 process_input(#tcp{} = Tcp, Data, State) ->
     % "check sequence number"
     case accept_check(Tcp, Data, State) of
@@ -709,6 +716,7 @@ controlling_process(Sock, OldOwner, NewOwner) ->
 move_messages(Sock, NewOwner) ->
     receive
         {tcp_closed, Sock} = M -> move_message(M, Sock, NewOwner);
+        {tcp_error, Sock, _} = M -> move_message(M, Sock, NewOwner);
         {tcp, Sock, _} = M -> move_message(M, Sock, NewOwner)
     after 0 ->
         ok
