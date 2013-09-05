@@ -34,11 +34,16 @@
 -export([tcp_self_connect/1]).
 -export([tcp_echo/1]).
 -export([tcp_bulk_transfer/1]).
+-export([tcp_unlisten/1]).
 -export([tcp_close/1]).
 
--define(DISCARD_PORT, 9).
+% server ports
 -define(ECHO_PORT, 7).
+-define(DISCARD_PORT, 9).
+-define(UNLISTEN_PORT, 4000).
 -define(CLOSE_PORT, 5000).
+
+% client ports
 -define(LOCAL_PORT, 8888).
 -define(SELF_PORT, 7777).
 
@@ -61,6 +66,7 @@ groups() ->
         tcp_self_connect,
         tcp_echo,
         tcp_bulk_transfer,
+        tcp_unlisten,
         tcp_close
     ],
     [{loopback, [parallel], [
@@ -129,6 +135,16 @@ tcp_echo(Config) ->
 tcp_bulk_transfer(Config) ->
     IP = ?config(ip, Config),
     tcp_send(IP, ?DISCARD_PORT, IP, ?LOCAL_PORT, Config).
+
+tcp_unlisten(Config) ->
+    IP = ?config(ip, Config),
+    try
+        tcp_send_and_recv(IP, ?UNLISTEN_PORT, IP, ?LOCAL_PORT, Config)
+    catch
+        error:{badmatch, {error, econnrefused}} = E ->
+            ct:pal("expected exception ~p", [E]),
+            ok
+    end.
 
 tcp_close(Config) ->
     IP = ?config(ip, Config),
