@@ -65,6 +65,7 @@
     writers = [] :: [{from(), binary()}] | non_neg_integer(),
     reader = none :: none | {none | reference(), from(), non_neg_integer(),
         binary()} | boolean(),
+    close_reason = closed :: closed | econnreset,
     namespace}).
 
 -define(MSL, (30 * 1000)).
@@ -355,15 +356,21 @@ update_state_on_flags(#tcp{syn = 0, fin = 1},
 update_state_on_flags(_, State) ->
     State.
 
-reset(#tcp_state{owner = none} = State) ->
-    lager:info("TCP ~p reset no owner", [self()]),
-    State2 = set_state(closed, State),
-    process_users(State2);
+set_close_reason(Reason, State) ->
+    State#tcp_state{close_reason = Reason}.
+
 reset(#tcp_state{owner = Owner} = State) ->
     lager:info("TCP ~p reset owner ~p", [self(), Owner]),
-    Owner ! {tcp_error, self_socket(), econnreset},  % XXXshould queue?
+    send_to_owner({tcp_error, self_socket(), econnreset}, State),
     State2 = set_state(closed, State),
-    process_users(State2).
+    State3 = set_close_reason(econnreset, State2),
+    process_users(State3).
+
+send_to_owner(_Msg, #tcp_state{owner = none}) ->
+    ok;
+send_to_owner(Msg, #tcp_state{owner = Owner}) ->
+    % XXXshould queue?
+    Owner ! Msg.  % XXXshould queue?
 
 % "check sequence number"
 %
@@ -790,11 +797,12 @@ add_writer(Writer, #tcp_state{writers = Writers} = State) ->
 process_writers(#tcp_state{writers = []} = State) ->
     State;
 process_writers(#tcp_state{writers = [{From, _}|Rest],
+                           close_reason = Reason,
                            state = TcpState} = State) when
         TcpState =:= fin_wait_1 orelse TcpState =:= fin_wait_2 orelse
         TcpState =:= closing orelse TcpState =:= time_wait orelse
         TcpState =:= last_ack orelse TcpState =:= closed ->
-    gen_server:reply(From, {error, closed}),
+    gen_server:reply(From, {error, Reason}),
     process_writers(State#tcp_state{writers = Rest});
 process_writers(#tcp_state{snd_buf = SndBuf,
                            snd_buf_size = SndBufSize} = State) when
@@ -819,6 +827,7 @@ process_writers(#tcp_state{snd_buf = SndBuf,
 process_readers(#tcp_state{reader = none} = State) ->
     State;
 process_readers(#tcp_state{rcv_buf = <<>>,
+                           close_reason = Reason,
                            reader = {TRef, From, _, Data},
                            state = TcpState} = State) when
        TcpState =:= close_wait orelse TcpState =:= last_ack orelse
@@ -828,7 +837,7 @@ process_readers(#tcp_state{rcv_buf = <<>>,
         <<>> ->
             lager:info("TCP ~p user read result closed", [self()]),
             lager:debug("closed ~p", [pp(State)]),
-            gen_server:reply(From, {error, closed});
+            gen_server:reply(From, {error, Reason});
         Partial ->
             reply_data(TRef, From, Partial)
     end,
