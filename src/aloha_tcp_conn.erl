@@ -752,6 +752,8 @@ move_message(M, Sock, NewOwner) ->
 
 %% async messages ({active, true} stuff)
 
+deliver_to_app(#tcp_state{owner = none} = State) ->
+    State;
 deliver_to_app(#tcp_state{active = false} = State) ->
     State;
 deliver_to_app(#tcp_state{suppress = true} = State) ->
