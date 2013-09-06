@@ -25,6 +25,7 @@
 -module(aloha_protocol).
 -export([dispatch/2]).
 
+% XXX -callback is not available for R14
 % -type plist() :: [proplists:property()].
 % -callback handle(Pkt :: tuple(), Stack :: [tuple()], Opts :: plist()) -> any().
 
