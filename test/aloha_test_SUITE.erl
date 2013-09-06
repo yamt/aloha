@@ -69,10 +69,16 @@ groups() ->
         tcp_unlisten,
         tcp_close
     ],
-    [{loopback, [parallel], [
+    Protocols = [
         {group, ipv4},
         {group, ipv6}
+    ],
+    [{loopback, [], [
+        {group, async},
+        {group, sync}
      ]},
+     {async, [parallel], Protocols},
+     {sync,  [parallel], Protocols},
      {ipv4, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests},
      {ipv6, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests}].
 
@@ -110,6 +116,10 @@ init_per_group(loopback, Config) ->
         {?CLOSE_PORT, fun(Sock) -> aloha_socket:close(Sock) end}
     ]),
     [{loopback, Pid}, {servers, Servers}|Config];
+init_per_group(async, Config) ->
+    [{mode, async}|Config];
+init_per_group(sync, Config) ->
+    [{mode, sync}|Config];
 init_per_group(ipv4, Config) ->
     [{proto, ipv4}, {ip, <<127,0,0,1>>}|Config];
 init_per_group(ipv6, Config) ->
@@ -119,6 +129,10 @@ end_per_group(loopback, Config) ->
     Pid = ?config(loopback, Config),
     Servers = ?config(servers, Config),
     kill_and_wait([Pid | Servers]);
+end_per_group(async, _Config) ->
+    ok;
+end_per_group(sync, _Config) ->
+    ok;
 end_per_group(ipv4, _Config) ->
     ok;
 end_per_group(ipv6, _Config) ->
@@ -172,16 +186,18 @@ make_data() ->
 
 tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
     Nic = ?config(loopback, Config),
+    Mode = ?config(mode, Config),
     {ok, Opts} = gen_server:call(Nic, getopts),
     Addr = proplists:get_value(addr, Opts),
     Mtu = proplists:get_value(mtu, Opts),
     Backend = proplists:get_value(backend, Opts),
     Msg = make_data(),
     MsgSize = byte_size(Msg),
+    ActiveOpts = [{active, true} || Mode =:= async],
     {ok, Sock} = aloha_tcp:connect(?MODULE, RemoteIPAddr, RemotePort, Addr,
                                    Backend,
                                    [{ip, LocalIPAddr}, {port, LocalPort},
-                                    {mtu, Mtu}, {rcv_buf, MsgSize}]),
+                                    {mtu, Mtu}, {rcv_buf, MsgSize}|ActiveOpts]),
     PeerName = {aloha_addr:to_ip(RemoteIPAddr), RemotePort},
     {ok, PeerName} = aloha_socket:peername(Sock),
     SockName = {aloha_addr:to_ip(LocalIPAddr), LocalPort},
@@ -198,14 +214,44 @@ tcp_cleanup(Sock) ->
     {aloha_socket, SockPid} = Sock,
     wait(SockPid).
 
+recv(Sock, MsgSize, Config) ->
+    case ?config(mode, Config) of
+        async -> async_recv(Sock, MsgSize);
+        sync -> aloha_socket:recv(Sock, MsgSize)
+    end.
+
+async_recv(Sock, MsgSize) ->
+    %aloha_socket:setopts(Sock, [{active, true}]),
+    ct:pal("async_recv on ~p for ~p bytes", [Sock, MsgSize]),
+    async_recv(Sock, MsgSize, <<>>).
+
+async_recv(_Sock, 0, Acc) ->
+    {ok, Acc};
+async_recv(Sock, MsgSize, Acc) ->
+    receive
+        {tcp, Sock, Data} ->
+            Left = MsgSize - byte_size(Data),
+            ct:pal("~p bytes received (~p bytes left)",
+                   [byte_size(Data), Left]),
+            async_recv(Sock, Left, <<Acc/bytes, Data/bytes>>);
+        {tcp_closed, Sock} ->
+            case Acc of
+                <<>> -> {error, closed};
+                _ -> {ok, Acc}
+            end;
+        Other ->
+            ct:pal("got a unexpected msg ~p", [Other]),
+            {error, {unknown_msg, Other}}
+    end.
+
 tcp_send_and_recv(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
     {Sock, Msg} = tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
                               Config),
     MsgSize = byte_size(Msg),
     ok = aloha_socket:send(Sock, Msg),
     ok = aloha_socket:shutdown(Sock, write),
-    {ok, Msg} = aloha_socket:recv(Sock, MsgSize),
-    {error, closed} = aloha_socket:recv(Sock, MsgSize),
+    {ok, Msg} = recv(Sock, MsgSize, Config),
+    {error, closed} = recv(Sock, MsgSize, Config),
     ok = aloha_socket:close(Sock),
     tcp_cleanup(Sock).
 
@@ -215,7 +261,7 @@ tcp_send(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
     MsgSize = byte_size(Msg),
     ok = aloha_socket:send(Sock, Msg),
     ok = aloha_socket:shutdown(Sock, write),
-    {error, closed} = aloha_socket:recv(Sock, MsgSize),
+    {error, closed} = recv(Sock, MsgSize, Config),
     ok = aloha_socket:close(Sock),
     tcp_cleanup(Sock).
 
