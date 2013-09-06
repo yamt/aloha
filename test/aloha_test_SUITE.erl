@@ -108,31 +108,38 @@ init_per_group(loopback, Config) ->
     {ok, Pid} = aloha_nic_loopback:create(?MODULE, HwAddr),
     ok = gen_server:call(Pid, {setopts, [{ip, <<127,0,0,1>>},
                                          {ipv6, <<1:128>>}]}),
-    Servers = lists:map(fun({Port, Fun}) ->
-        proc_lib:spawn(fun() -> tcp_server(?MODULE, Port, Fun) end)
-    end, [
-        {?ECHO_PORT, fun echo_loop/1},
-        {?DISCARD_PORT, fun discard_loop/1},
-        {?CLOSE_PORT, fun(Sock) -> aloha_socket:close(Sock) end}
-    ]),
-    [{loopback, Pid}, {servers, Servers}|Config];
+    [{loopback, Pid}|Config];
 init_per_group(async, Config) ->
-    [{mode, async}|Config];
+    Config2 = [{mode, async}|Config],
+    Servers = start_servers(Config2),
+    [{servers, Servers}|Config2];
 init_per_group(sync, Config) ->
-    [{mode, sync}|Config];
+    Config2 = [{mode, sync}|Config],
+    Servers = start_servers(Config2),
+    [{servers, Servers}|Config2];
 init_per_group(ipv4, Config) ->
     [{proto, ipv4}, {ip, <<127,0,0,1>>}|Config];
 init_per_group(ipv6, Config) ->
     [{proto, ipv6}, {ip, <<1:128>>}|Config].
 
+start_servers(Config) ->
+    lists:map(fun({Port, Fun}) ->
+        proc_lib:spawn(fun() -> tcp_server(?MODULE, Port, Fun, Config) end)
+    end, [
+        {?ECHO_PORT, fun echo_loop/2},
+        {?DISCARD_PORT, fun discard_loop/2},
+        {?CLOSE_PORT, fun closer/2}
+    ]).
+
 end_per_group(loopback, Config) ->
     Pid = ?config(loopback, Config),
+    kill_and_wait([Pid]);
+end_per_group(async, Config) ->
     Servers = ?config(servers, Config),
-    kill_and_wait([Pid | Servers]);
-end_per_group(async, _Config) ->
-    ok;
-end_per_group(sync, _Config) ->
-    ok;
+    kill_and_wait(Servers);
+end_per_group(sync, Config) ->
+    Servers = ?config(servers, Config),
+    kill_and_wait(Servers);
 end_per_group(ipv4, _Config) ->
     ok;
 end_per_group(ipv6, _Config) ->
@@ -186,14 +193,13 @@ make_data() ->
 
 tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
     Nic = ?config(loopback, Config),
-    Mode = ?config(mode, Config),
+    ActiveOpts = active_opts(Config),
     {ok, Opts} = gen_server:call(Nic, getopts),
     Addr = proplists:get_value(addr, Opts),
     Mtu = proplists:get_value(mtu, Opts),
     Backend = proplists:get_value(backend, Opts),
     Msg = make_data(),
     MsgSize = byte_size(Msg),
-    ActiveOpts = [{active, true} || Mode =:= async],
     {ok, Sock} = aloha_tcp:connect(?MODULE, RemoteIPAddr, RemotePort, Addr,
                                    Backend,
                                    [{ip, LocalIPAddr}, {port, LocalPort},
@@ -223,17 +229,17 @@ recv(Sock, MsgSize, Config) ->
 async_recv(Sock, MsgSize) ->
     %aloha_socket:setopts(Sock, [{active, true}]),
     ct:pal("async_recv on ~p for ~p bytes", [Sock, MsgSize]),
-    async_recv(Sock, MsgSize, <<>>).
+    async_recv(Sock, MsgSize, true, <<>>).
 
-async_recv(_Sock, 0, Acc) ->
+async_recv(_Sock, Left, false, Acc) when Left =< 0 ->
     {ok, Acc};
-async_recv(Sock, MsgSize, Acc) ->
+async_recv(Sock, MsgSize, _, Acc) ->
     receive
         {tcp, Sock, Data} ->
             Left = MsgSize - byte_size(Data),
             ct:pal("~p bytes received (~p bytes left)",
                    [byte_size(Data), Left]),
-            async_recv(Sock, Left, <<Acc/bytes, Data/bytes>>);
+            async_recv(Sock, Left, false, <<Acc/bytes, Data/bytes>>);
         {tcp_closed, Sock} ->
             case Acc of
                 <<>> -> {error, closed};
@@ -286,31 +292,41 @@ wait(List) ->
         end
     end, List).
 
-tcp_server(NS, Port, Fun) ->
+active_opts(Config) ->
+    case ?config(mode, Config) of
+        async -> [];
+        sync -> [{active, false}]
+    end.
+
+tcp_server(NS, Port, Fun, Config) ->
+    ActiveOpts = active_opts(Config),
     {ok, Sock} = aloha_socket:listen({NS, Port},
                                      [binary, {packet, raw}, {reuseaddr, true},
-                                      {nodelay, true}, {active, false}]),
-    accept_loop(Sock, Fun).
+                                      {nodelay, true}|ActiveOpts]),
+    accept_loop(Sock, Fun, Config).
 
-accept_loop(LSock, Fun) ->
+accept_loop(LSock, Fun, Config) ->
     {ok, Sock} = aloha_socket:accept(LSock),
-    Pid = proc_lib:spawn_link(fun() -> Fun(Sock) end),
+    Pid = proc_lib:spawn_link(fun() -> Fun(Sock, Config) end),
     ok = aloha_socket:controlling_process(Sock, Pid),
-    accept_loop(LSock, Fun).
+    accept_loop(LSock, Fun, Config).
 
-echo_loop(Sock) ->
-    case aloha_socket:recv(Sock, 0) of
+echo_loop(Sock, Config) ->
+    case recv(Sock, 0, Config) of
         {ok, Data} ->
             ok = aloha_socket:send(Sock, Data),
-            echo_loop(Sock);
+            echo_loop(Sock, Config);
         {error, closed} ->
             ok = aloha_socket:close(Sock)
     end.
 
-discard_loop(Sock) ->
-    case aloha_socket:recv(Sock, 0) of
+discard_loop(Sock, Config) ->
+    case recv(Sock, 0, Config) of
         {ok, _Data} ->
-            discard_loop(Sock);
+            discard_loop(Sock, Config);
         {error, closed} ->
             ok = aloha_socket:close(Sock)
     end.
+
+closer(Sock, _Config) ->
+    aloha_socket:close(Sock).
