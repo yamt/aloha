@@ -159,7 +159,14 @@ connect(NS, RAddr0, RPort, L1Src, Backend, Opts) ->
     {ok, Pid} = aloha_tcp_conn:start(Opts3),
     ok = gen_server:call(Pid, connect),
     Sock = {aloha_socket, Pid},
-    connect_wait(Sock).
+    case connect_wait(Sock) of
+        {ok, Sock} ->
+            Opts4 = aloha_utils:acc_opts([active], Opts, []),
+            aloha_socket:setopts(Sock, Opts4),
+            {ok, Sock};
+        Error ->
+            Error
+    end.
 
 connect_wait(Sock) ->
     lager:info("~p waiting active connect completion", [self()]),

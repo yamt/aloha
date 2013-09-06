@@ -758,6 +758,7 @@ deliver_to_app(#tcp_state{suppress = true} = State) ->
     State;
 deliver_to_app(#tcp_state{rcv_buf = <<>>, owner = Pid,
                           pending_ctl = [Msg|Rest]} = State) ->
+    lager:info("deliver ~p to ~p", [Msg, Pid]),
     Pid ! Msg,
     deliver_to_app(State#tcp_state{pending_ctl = Rest});
 deliver_to_app(#tcp_state{rcv_buf = <<>>} = State) ->
@@ -765,6 +766,7 @@ deliver_to_app(#tcp_state{rcv_buf = <<>>} = State) ->
 deliver_to_app(#tcp_state{rcv_buf = RcvBuf, owner = Pid,
                           active = Mode} = State) ->
     % mimic inet {deliver, term}
+    lager:info("deliver ~p bytes of data to ~p", [byte_size(RcvBuf), Pid]),
     Pid ! {tcp, self_socket(), RcvBuf},
     NextMode = case Mode of
         once -> false;
