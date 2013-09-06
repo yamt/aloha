@@ -161,7 +161,8 @@ connect(NS, RAddr0, RPort, L1Src, Backend, Opts) ->
     Sock = {aloha_socket, Pid},
     case connect_wait(Sock) of
         {ok, Sock} ->
-            Opts4 = aloha_utils:acc_opts([active], Opts, []),
+            DefOpts = [{active, true}],
+            Opts4 = aloha_utils:acc_opts([active], Opts, DefOpts),
             aloha_socket:setopts(Sock, Opts4),
             {ok, Sock};
         Error ->
