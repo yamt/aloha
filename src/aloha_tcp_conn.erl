@@ -449,9 +449,10 @@ update_receiver(#tcp{syn = 1, seqno = Seq}, <<>>,
                 #tcp_state{rcv_nxt = undefined, state = TcpState} = State) ->
     true = TcpState =:= established orelse TcpState =:= syn_received,
     {true, State#tcp_state{rcv_nxt = Seq + 1}};
-update_receiver(#tcp{seqno = Seq, rst = 0} = Tcp, Data,
+update_receiver(#tcp{seqno = Seq} = Tcp, Data,
                 #tcp_state{rcv_nxt = Seq, owner = none} = State)
                 when Data =/= <<>> ->
+    % RFC 1122 4.2.2.13 "send a RST to show that data was lost"
     lager:info("TCP ~p sending rst for ~p datalen ~p state ~p",
                [self(), pp(Tcp), byte_size(Data), pp(State)]),
     send_rst(State),
@@ -872,12 +873,16 @@ setup_reader_timeout(Timeout) ->
 %% shutdown
 
 shutdown_receiver(State) ->
-    % just close the receive window.
-    % XXX keeping window closed makes us refuse accepting fin.
+    % do nothing.
+    % (it's basically what linux does.)
+    %
+    % note about other implementations:
+    % NetBSD discards the buffer and closes window.
+    % it accepts FIN-only segments even if the window is closed.
+    % however, it can be a problem with some peers which don't
+    % send FIN to the closed window.  (eg. linux)
     % rcv_adv masks the problem in the common cases, though.
-    % (it's what linux does.)
-    State2 = State#tcp_state{rcv_buf = <<>>, rcv_buf_size = 0},
-    tcp_output(State2).
+    State.
 
 shutdown_sender(State) ->
     State2 = update_state_on_close(State),
@@ -887,6 +892,10 @@ shutdown_sender(State) ->
 
 %% close
 
+close(#tcp_state{rcv_buf = RcvBuf} = State) when RcvBuf =/= <<>> ->
+    % RFC 1122 4.2.2.13 "send a RST to show that data was lost"
+    send_rst(State),
+    close(State#tcp_state{rcv_buf = <<>>});
 close(State) ->
     State2 = shutdown_receiver(State),
     State3 = shutdown_sender(State2),
