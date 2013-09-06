@@ -53,7 +53,7 @@ handle_icmpv6(#icmpv6{type = neighbor_solicitation,
     [Ip, Ether] = Stack,
     lager:info("icmpv6 neighbor sol who-has ~w tell ~w", [Addr, Ip#ipv6.src]),
     LLAddr = proplists:get_value(addr, Opts),
-    Rep = [Ether#ether{dst = Ether#ether.src, src = Addr},
+    Rep = [Ether#ether{dst = Ether#ether.src, src = LLAddr},
            Ip#ipv6{src = Addr, dst = Ip#ipv6.src},
            Icmp#icmpv6{type = neighbor_advertisement,
                        data = #neighbor_advertisement{
