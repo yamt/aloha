@@ -942,7 +942,7 @@ setopts([H|Rest], State, Orig) ->
     setopts(Rest, setopt(H, State), Orig).
 
 setopts(Opts, State) ->
-    setopts(Opts, State, State).
+    setopts(aloha_utils:normalize_opts(Opts), State, State).
 
 %% peername
 

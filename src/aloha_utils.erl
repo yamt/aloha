@@ -33,7 +33,7 @@ merge_opts(Opts1, Opts2) ->
     normalize_opts(Opts1 ++ Opts2).
 
 normalize_opts(Opts) ->
-    proplists:compact(lists:ukeysort(1, proplists:unfold(Opts))).
+    lists:ukeysort(1, proplists:unfold(Opts)).
 
 % find options listed in List in Opts1 and prepend Opts2 with them
 acc_opts(List, Opts1, Opts2) ->
