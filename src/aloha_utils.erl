@@ -38,7 +38,7 @@ acc_opts(List, Opts1, Opts2) ->
 
 lookup_and_acc(Name, Opts, Acc) ->
     case proplists:lookup(Name, Opts) of
-        false -> Acc;
+        none -> Acc;
         T -> [T|Acc]
     end.
 
