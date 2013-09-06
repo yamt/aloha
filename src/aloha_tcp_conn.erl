@@ -36,21 +36,36 @@
 
 -behaviour(gen_server).
 
--record(tcp_state, {snd_una, snd_nxt, snd_wnd,
-                    snd_buf, snd_buf_size,
-                    snd_mss,
-                    snd_syn = 0,
-                    snd_fin = 0, rexmit_timer, delack_timer,
-                    rcv_nxt,
-                    rcv_adv,  % the right edge of advertised window
-                    rcv_buf, rcv_buf_size,
-                    rcv_mss,
-                    backend, template,
-                    state, owner, active = false, suppress = false,
-                    pending_ctl = [],
-                    key,
-                    writers = [], reader = none,
-                    namespace}).
+-type from() :: {pid(), reference()}.
+
+-record(tcp_state, {
+    snd_una :: tcp_seq(),
+    snd_nxt :: tcp_seq(),
+    snd_wnd :: non_neg_integer(),
+    snd_buf :: binary() | non_neg_integer(),
+    snd_buf_size :: non_neg_integer(),
+    snd_mss :: non_neg_integer(),
+    snd_syn = 0 :: flag(),
+    snd_fin = 0 :: flag(),
+    rexmit_timer :: reference(),
+    delack_timer :: reference(),
+    rcv_nxt :: tcp_seq(),
+    rcv_adv :: tcp_seq(),  % the right edge of advertised window
+    rcv_buf :: binary() | non_neg_integer(),
+    rcv_buf_size :: non_neg_integer(),
+    rcv_mss :: non_neg_integer(),
+    backend,
+    template,
+    state :: atom(),
+    owner :: none | pid(),
+    active = false,
+    suppress = false,
+    pending_ctl = [],
+    key,
+    writers = [] :: [{from(), binary()}] | non_neg_integer(),
+    reader = none :: none | {none | reference(), from(), non_neg_integer(),
+        binary()} | boolean(),
+    namespace}).
 
 -define(MSL, (30 * 1000)).
 
