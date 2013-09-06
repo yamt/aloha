@@ -23,13 +23,16 @@
 % SUCH DAMAGE.
 
 -module(aloha_protocol).
--export([behaviour_info/1]).
 -export([dispatch/2]).
 
-behaviour_info(callbacks) ->
-    [
-        {handle, 3}
-    ].
+-type plist() :: [proplists:property()].
+-callback handle(Pkt :: tuple(), Stack :: [tuple()], Opts :: plist()) -> any().
+
+% -export([behaviour_info/1]).
+% behaviour_info(callbacks) ->
+%     [
+%         {handle, 3}
+%     ].
 
 dispatch(Msg, Opts) ->
     aloha_nic:next_protocol(Msg, Opts).
