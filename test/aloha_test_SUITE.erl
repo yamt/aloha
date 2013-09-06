@@ -151,7 +151,14 @@ tcp_close(Config) ->
     try
         tcp_send_and_recv(IP, ?CLOSE_PORT, IP, ?LOCAL_PORT, Config)
     catch
-        error:{badmatch, {error, closed}} = E ->
+        error:{badmatch, {error, econnreset}} = E ->
+            Trace = erlang:get_stacktrace(),
+            false = lists:keyfind(tcp_prepare, 2, Trace),
+            ct:pal("expected exception ~p", [E]),
+            ok;
+        error:{badmatch, {error, econnrefused}} = E ->
+            Trace = erlang:get_stacktrace(),
+            {?MODULE, tcp_prepare, 5, _} = lists:keyfind(tcp_prepare, 2, Trace),
             ct:pal("expected exception ~p", [E]),
             ok
     end.
