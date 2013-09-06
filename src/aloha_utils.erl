@@ -24,13 +24,16 @@
 
 -module(aloha_utils).
 
--export([merge_opts/2, acc_opts/3]).
+-export([merge_opts/2, normalize_opts/1, acc_opts/3]).
 -export([pr/2]).
 -export([bin_not/1, bin_and/2, bin_or/2]).
 
 % normalize Opts1++Opts2
 merge_opts(Opts1, Opts2) ->
-    proplists:compact(lists:ukeysort(1, proplists:unfold(Opts1 ++ Opts2))).
+    normalize_opts(Opts1 ++ Opts2).
+
+normalize_opts(Opts) ->
+    proplists:compact(lists:ukeysort(1, proplists:unfold(Opts))).
 
 % find options listed in List in Opts1 and prepend Opts2 with them
 acc_opts(List, Opts1, Opts2) ->
