@@ -37,4 +37,3 @@ TODO
 - handle exiting processes in accept/read/write queues
 - wscale option
 - out of order segment queueing
-- user notification of connection abort (econnreset)
