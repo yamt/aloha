@@ -221,6 +221,7 @@ tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
     Backend = proplists:get_value(backend, Opts),
     Msg = make_data(),
     MsgSize = byte_size(Msg),
+    ct:pal("connecting"),
     {ok, Sock} = aloha_tcp:connect(?MODULE, RemoteIPAddr, RemotePort, Addr,
                                    Backend,
                                    [{ip, LocalIPAddr}, {port, LocalPort},
@@ -229,6 +230,7 @@ tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
     {ok, PeerName} = aloha_socket:peername(Sock),
     SockName = {aloha_addr:to_ip(LocalIPAddr), LocalPort},
     {ok, SockName} = aloha_socket:sockname(Sock),
+    ct:pal("peername ~p sockname ~p", [PeerName, SockName]),
     {Sock, Msg}.
 
 tcp_cleanup(Sock) ->
@@ -284,10 +286,15 @@ tcp_send_and_recv(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
     {Sock, Msg} = tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
                               Config),
     MsgSize = byte_size(Msg),
+    ct:pal("send"),
     ok = aloha_socket:send(Sock, Msg),
+    ct:pal("shutdown"),
     ok = aloha_socket:shutdown(Sock, write),
+    ct:pal("recv"),
     {ok, Msg} = recv(Sock, MsgSize, Config),
+    ct:pal("recv fin"),
     {error, closed} = recv(Sock, MsgSize, Config),
+    ct:pal("close"),
     ok = aloha_socket:close(Sock),
     tcp_cleanup(Sock).
 
@@ -295,9 +302,13 @@ tcp_send(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
     {Sock, Msg} = tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
                               Config),
     MsgSize = byte_size(Msg),
+    ct:pal("send"),
     ok = aloha_socket:send(Sock, Msg),
+    ct:pal("shutdown"),
     ok = aloha_socket:shutdown(Sock, write),
+    ct:pal("recv fin"),
     {error, closed} = recv(Sock, MsgSize, Config),
+    ct:pal("close"),
     ok = aloha_socket:close(Sock),
     tcp_cleanup(Sock).
 
