@@ -187,17 +187,20 @@ handle_call(force_close, {Pid, _}, #tcp_state{owner = Owner} = State) ->
 handle_call({setopts, Opts}, _From, State) ->
     {Ret, State2} = setopts(proplists:unfold(Opts), State),
     State3 = deliver_to_app(State2),
-    reply(Ret, State3);
+    State4 = tcp_output(State3),
+    reply(Ret, State4);
 handle_call({set_suppress, Mode}, _From,
             #tcp_state{suppress = OldMode} = State) ->
     State2 = State#tcp_state{suppress = Mode},
     State3 = deliver_to_app(State2),
-    reply({ok, OldMode}, State3);
+    State4 = tcp_output(State3),
+    reply({ok, OldMode}, State4);
 handle_call({test_and_set_active, OldMode, NewMode}, _From,
             #tcp_state{active = OldMode} = State) ->
     State2 = State#tcp_state{active = NewMode},
     State3 = deliver_to_app(State2),
-    reply(ok, State3);
+    State4 = tcp_output(State3),
+    reply(ok, State4);
 handle_call(get_owner_info, _From,
             #tcp_state{owner = Owner, active = Active} = State) ->
     reply({Owner, Active}, State).
