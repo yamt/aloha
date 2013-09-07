@@ -217,12 +217,14 @@ handle_cast(M, State) ->
     noreply(State).
 
 handle_info({timeout, TRef, reader_timeout},
-            #tcp_state{rcv_buf = RcvBuf,
-                       reader = {TRef, From, _, Data}} = State) ->
+            #tcp_state{reader = {TRef, From, _, <<>>}} = State) ->
     gen_server:reply(From, {error, timeout}),
-    % XXX XXX this shrinks window advertised to the peer
-    RcvBuf2 = <<Data/bytes, RcvBuf/bytes>>,
-    noreply(State#tcp_state{rcv_buf = RcvBuf2, reader = none});
+    noreply(State#tcp_state{reader = none});
+handle_info({timeout, TRef, reader_timeout},
+            #tcp_state{reader = {TRef, From, _, Data}} = State) ->
+    % XXX is it ok to return a short result?  what gen_tcp:recv/3 does?
+    reply_data(none, From, Data),
+    noreply(State#tcp_state{reader = none});
 handle_info({timeout, TRef, time_wait_timer},
             #tcp_state{rexmit_timer = TRef, state = time_wait} = State) ->
     lager:debug("2msl timer expired"),
