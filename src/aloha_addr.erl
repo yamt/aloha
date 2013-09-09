@@ -53,3 +53,36 @@ ipv4_to_bin({A, B, C, D}) ->
 
 ipv6_to_bin({A, B, C, D, E, F, G, H}) ->
     <<A:16, B:16, C:16, D:16, E:16, F:16, G:16, H:16>>.
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+ipv4_to_ip_test() ->
+    ?assertEqual({16#aa,16#bb,16#cc,16#dd},
+                 to_ip({16#aa,16#bb,16#cc,16#dd})),
+    ?assertEqual({16#aa,16#bb,16#cc,16#dd},
+                 to_ip(<<16#aabbccdd:32>>)).
+
+ipv6_to_ip_test() ->
+    ?assertEqual({16#1122,16#3344,16#5566,16#7788,
+                  16#99aa,16#bbcc,16#ddee,16#ff00},
+                 to_ip({16#1122,16#3344,16#5566,16#7788,
+                        16#99aa,16#bbcc,16#ddee,16#ff00})),
+    ?assertEqual({16#1122,16#3344,16#5566,16#7788,
+                  16#99aa,16#bbcc,16#ddee,16#ff00},
+                 to_ip(<<16#112233445566778899aabbccddeeff00:128>>)).
+
+ipv4_to_bin_test() ->
+    ?assertEqual(<<16#aabbccdd:32>>,
+                 to_bin({16#aa,16#bb,16#cc,16#dd})),
+    ?assertEqual(<<16#aabbccdd:32>>,
+                 to_bin(<<16#aabbccdd:32>>)).
+
+ipv6_to_bin_test() ->
+    ?assertEqual(<<16#112233445566778899aabbccddeeff00:128>>,
+                 to_bin({16#1122,16#3344,16#5566,16#7788,
+                         16#99aa,16#bbcc,16#ddee,16#ff00})),
+    ?assertEqual(<<16#112233445566778899aabbccddeeff00:128>>,
+                 to_bin(<<16#112233445566778899aabbccddeeff00:128>>)).
+
+-endif.
