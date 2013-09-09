@@ -22,6 +22,10 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
+% random references:
+% http://www.ietf.org/proceedings/86/slides/slides-86-tcpm-4
+% http://www.bell-labs.com/user/johnlin/probing-TCP.pdf
+
 -module(aloha_tcp_conn).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
