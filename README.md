@@ -33,7 +33,6 @@ TODO
 - ip fragment
 - timeout
 - use gproc instead of raw ets tables?
-- arp/ndp cache expiry
 - handle exiting processes in accept/read/write queues
 - wscale option
 - out of order segment queueing
