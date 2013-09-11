@@ -42,7 +42,7 @@ handle_icmp(#icmp{type = echo_request} = Icmp, Stack, Opts) ->
     Rep = [Ether#ether{dst = Ether#ether.src, src = Addr},
            Ip#ip{src = IpAddr, dst = Ip#ip.src},
            Icmp#icmp{type = echo_reply}],
-    lager:info("icmp ~p", [aloha_utils:pr(Rep, ?MODULE)]),
+    lager:debug("icmp ~p", [aloha_utils:pr(Rep, ?MODULE)]),
     aloha_nic:send_packet(Rep);
 handle_icmp(_Icmp, _Stack, _Opts) ->
     ok.
