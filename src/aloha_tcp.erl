@@ -23,7 +23,7 @@
 % SUCH DAMAGE.
 
 -module(aloha_tcp).
--export([handle/3]).
+-export([handle/4]).
 -export([send_packet/3]).
 
 -export([listen/2]).
@@ -33,7 +33,7 @@
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
-handle(Pkt, Stack, Opts) ->
+handle(tcp, Pkt, Stack, Opts) ->
     [_Ip, _Ether] = Stack,
     {Tcp, bin, Data} = aloha_packet:decode(tcp, Pkt, Stack),
     handle_tcp(Tcp, Stack, Data, Opts).

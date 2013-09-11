@@ -23,14 +23,14 @@
 % SUCH DAMAGE.
 
 -module(aloha_icmpv6).
--export([handle/3]).
+-export([handle/4]).
 -export([discovery_packet/3]).
 
 -behaviour(aloha_protocol).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
-handle(Pkt, Stack, Opts) ->
+handle(icmpv6, Pkt, Stack, Opts) ->
     {Icmp, _Next, <<>>} = aloha_packet:decode(icmpv6, Pkt, Stack),
     Addr = proplists:get_value(ipv6, Opts),
     handle_icmpv6(Icmp, Stack, Addr, Opts).

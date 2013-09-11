@@ -23,13 +23,13 @@
 % SUCH DAMAGE.
 
 -module(aloha_icmp).
--export([handle/3]).
+-export([handle/4]).
 
 -behaviour(aloha_protocol).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
-handle(Pkt, Stack, Opts) ->
+handle(icmp, Pkt, Stack, Opts) ->
     {Icmp, _Next, <<>>} = aloha_packet:decode(icmp, Pkt, Stack),
     handle_icmp(Icmp, Stack, Opts).
 

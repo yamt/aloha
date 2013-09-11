@@ -23,13 +23,13 @@
 % SUCH DAMAGE.
 
 -module(aloha_ip).
--export([handle/3]).
+-export([handle/4]).
 
 -behaviour(aloha_protocol).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
-handle(Pkt, Stack, Opts) ->
+handle(ip, Pkt, Stack, Opts) ->
     {Ip, Next, Rest} = aloha_packet:decode(ip, Pkt, Stack),
     IpAddr = proplists:get_value(ip, Opts),
     Mask = proplists:get_value(ip_mask, Opts, <<255,255,255,0>>),

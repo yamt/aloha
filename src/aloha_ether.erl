@@ -23,7 +23,7 @@
 % SUCH DAMAGE.
 
 -module(aloha_ether).
--export([handle/3]).
+-export([handle/4]).
 
 -behaviour(aloha_protocol).
 
@@ -31,7 +31,7 @@
 
 -define(BROADCAST, <<16#ffffffffffff:(6*8)>>).
 
-handle(Pkt, [], Opts) ->
+handle(ether, Pkt, [], Opts) ->
     {Ether, Next, Rest} = aloha_packet:decode(ether, Pkt, []),
     handle_ether(Ether, Next, Rest, Opts).
 

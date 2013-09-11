@@ -27,12 +27,12 @@
 
 % XXX -callback is not available for R14
 % -type plist() :: [proplists:property()].
-% -callback handle(Pkt :: tuple(), Stack :: [tuple()], Opts :: plist()) -> any().
+% -callback handle(Type :: atom(), Pkt :: tuple(), Stack :: [tuple()], Opts :: plist()) -> any().
 
 -export([behaviour_info/1]).
 behaviour_info(callbacks) ->
     [
-        {handle, 3}
+        {handle, 4}
     ].
 
 dispatch(Msg, Opts) ->

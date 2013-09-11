@@ -49,11 +49,11 @@ handle_call(Req, _From, State) ->
     {noreply, State}.
 
 handle_cast({packet, Pkt}, State) ->
-    aloha_ether:handle(Pkt, [], State#state.opts),
+    aloha_ether:handle(ether, Pkt, [], State#state.opts),
     {noreply, State};
 handle_cast({Type, Pkt, Stack}, State) ->
     Mod = ethertype_mod(Type),
-    Mod:handle(Pkt, Stack, State#state.opts),
+    Mod:handle(Type, Pkt, Stack, State#state.opts),
     {noreply, State};
 handle_cast({send_packet, Pkt}, #state{opts = Opts} = State) ->
     Backend = proplists:get_value(backend, Opts),
@@ -80,7 +80,8 @@ ethertype_mod(ip) -> aloha_ip;
 ethertype_mod(ipv6) -> aloha_ipv6;
 ethertype_mod(icmp) -> aloha_icmp;
 ethertype_mod(icmpv6) -> aloha_icmpv6;
-ethertype_mod(tcp) -> aloha_tcp.
+ethertype_mod(tcp) -> aloha_tcp;
+ethertype_mod(_) -> aloha_default.
 
 next_protocol(Msg, _Opts) ->
     gen_server:cast(self(), Msg).

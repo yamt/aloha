@@ -23,14 +23,14 @@
 % SUCH DAMAGE.
 
 -module(aloha_arp).
--export([handle/3]).
+-export([handle/4]).
 -export([discovery_packet/3]).
 
 -behaviour(aloha_protocol).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
-handle(Pkt, Stack, Opts) ->
+handle(arp, Pkt, Stack, Opts) ->
     {Arp, _Next, _Rest} = aloha_packet:decode(arp, Pkt, Stack),
     Addr = proplists:get_value(ip, Opts),
     handle_arp(Arp, Addr, Opts).
