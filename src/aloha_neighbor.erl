@@ -46,13 +46,15 @@ init(_Opts) ->
 handle_call(_Req, _From, State) ->
     {noreply, State}.
 
-handle_cast({resolve, Req}, State) ->
-    State2 = add_request(Req, State),
-    State3 = process_requests(State2),
-    {noreply, State3};
-handle_cast({resolved, Key, Value}, State) ->
+handle_cast({resolve, Req}, #state{q = Q} = State) ->
+    Q2 = add_request(Req, Q),
+    Q3 = process_requests(Q2),
+    State2 = State#state{q = Q3},
+    {noreply, State2};
+handle_cast({resolved, Key, Value}, #state{q = Q} = State) ->
     ets:insert(?MODULE, {Key, Value}),
-    State2 = process_requests(State),
+    Q2 = process_requests(Q),
+    State2 = State#state{q = Q2},
     {noreply, State2}.
 
 handle_info(Info, State) ->
@@ -66,38 +68,45 @@ terminate(Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-add_request(Req, #state{q = Q} = State) ->
-    State#state{q = Q ++ [Req]}.
+add_request(Req, Q) ->
+    Q ++ [Req].
 
-process_requests(#state{q = Q} = State) ->
-    Q2 = lists:foldl(fun send_or_acc/2, [], Q),
-    State#state{q = Q2}.
+process_requests(Q) ->
+    lists:foldl(fun(Req, Acc) ->
+        send_or_acc(fun lookup_cache/1, Req, Acc)
+    end, [], Q).
 
 send_packet(Pkt, NS, Backend) ->
-    List = send_or_acc({Pkt, NS, Backend}, []),
+    List = send_or_acc(fun lookup_cache/1, {Pkt, NS, Backend}, []),
     lists:foreach(fun(X) ->
         {Pkt, _NS, Backend} = X,
         send_discover(Pkt, Backend),
         gen_server:cast(?MODULE, {resolve, X}) end,
     List).
 
-send_or_acc({[#ether{dst = <<0,0,0,0,0,0>>}, L2|_] = Pkt, NS, Backend} = Req,
+lookup_cache(Key) ->
+    case catch ets:lookup_element(?MODULE, Key, 2) of
+        {'EXIT', _} ->
+            error;  % compat with dict:find/2
+        LLAddr ->
+            LLAddr
+    end.
+
+send_or_acc(LookupFun,
+            {[#ether{dst = <<0,0,0,0,0,0>>}, L2|_] = Pkt, NS, Backend} = Req,
             Acc) ->
     Key = key(L2, NS),
-    case catch lookup(Key) of
-        {'EXIT', _} ->
+    case catch LookupFun(Key) of
+        error ->
             lager:debug("neighbor not found for key ~p", [Key]),
             [Req|Acc];
         LLAddr ->
             send_packet_to(Pkt, LLAddr, Backend),
             Acc
     end;
-send_or_acc({Pkt, _NS, Backend}, Acc) ->
+send_or_acc(_LookupFun, {Pkt, _NS, Backend}, Acc) ->
     aloha_nic:send_packet(Pkt, Backend),
     Acc.
-
-lookup(Key) ->
-    ets:lookup_element(?MODULE, Key, 2).
 
 send_packet_to([Ether|Rest] = Pkt, LLAddr, Backend) ->
     lager:debug("neighbor send to ~p ~p",
