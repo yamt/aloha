@@ -94,5 +94,11 @@ send_packet(BinPkt, Backend) when is_binary(BinPkt) ->
     {M, F, A} = Backend,
     apply(M, F, [BinPkt|A]);
 send_packet(Pkt, Backend) ->
-    BinPkt = aloha_packet:encode_packet(Pkt),
+    BinPkt = try aloha_packet:encode_packet(Pkt)
+    catch
+        error:Error ->
+            lager:error("failed to encode packet ~p with ~p",
+                        [aloha_utils:pr(Pkt, ?MODULE), Error]),
+            <<>>
+    end,
     send_packet(BinPkt, Backend).
