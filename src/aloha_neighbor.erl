@@ -51,9 +51,11 @@ handle_call(_Req, _From, State) ->
 
 handle_cast({resolve, Req},
             #state{addrs = Addrs, used = Used, q = Q} = State) ->
-    Q2 = add_request(Req, Q),
-    {Q3, Used2} = process_requests(Addrs, Q2, Used),
-    State2 = State#state{q = Q3, used = Used2},
+    {Q2, Used2} = process_requests(Addrs, [Req], Used),
+    lists:foreach(fun({Pkt, _NS, Backend}) ->
+        send_discover(Pkt, Backend)
+    end, Q2),
+    State2 = State#state{q = Q ++ Q2, used = Used2},
     {noreply, State2};
 handle_cast({resolved, Key, Value},
             #state{addrs = Addrs, used = Used, q = Q} = State) ->
@@ -81,9 +83,6 @@ terminate(Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-add_request(Req, Q) ->
-    Q ++ [Req].
-
 process_requests(Dict, Q, Used) ->
     {Q2, Used2} = lists:foldl(fun(Req, {Acc, Used2}) ->
         send_or_acc(fun(Key, Used3) ->
@@ -100,7 +99,7 @@ process_requests(Dict, Q, Used) ->
     % now update the ets table for fast-path.
     % this way the chance of packet reordering should be small enough.
     true = dict:fold(fun(Key, Value, true) ->
-        ets:insert_new(?MODULE, {Key, Value})
+        ets:insert(?MODULE, {Key, Value})
     end, true, Used2),
     {Q2, dict:merge(fun(_Key, _Value1, Value2) -> Value2 end, Used, Used2)}.
 
@@ -108,8 +107,6 @@ send_packet(Pkt, NS, Backend) ->
     {List, ?MODULE} =
         send_or_acc(fun lookup_cache/2, ?MODULE, {Pkt, NS, Backend}, []),
     lists:foreach(fun(X) ->
-        {Pkt, _NS, Backend} = X,
-        send_discover(Pkt, Backend),
         gen_server:cast(?MODULE, {resolve, X}) end,
     List).
 
