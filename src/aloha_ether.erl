@@ -33,16 +33,21 @@
 
 handle(Pkt, [], Opts) ->
     {Ether, Next, Rest} = aloha_packet:decode(ether, Pkt, []),
-    OurAddr = proplists:get_value(addr, Opts),
-    handle_ether(Ether, Next, Rest, OurAddr, Opts).
+    handle_ether(Ether, Next, Rest, Opts).
 
-handle_ether(#ether{dst = ?BROADCAST} = Ether, Next, Rest, _OurAddr, Opts) ->
-    aloha_protocol:dispatch({Next, Rest, [Ether]}, Opts);
-handle_ether(#ether{dst = <<16#33, 16#33, _/bytes>>} = Ether, Next, Rest, _,
-             Opts) ->
+handle_ether(#ether{dst = Dst} = Ether, Next, Rest, Opts) ->
+    case is_ours(Dst, Opts) of
+        true -> aloha_protocol:dispatch({Next, Rest, [Ether]}, Opts);
+        false -> lager:info("ether not ours ~w~n", [Dst])
+    end.
+
+is_ours(?BROADCAST, _Opts) ->
+    true;
+is_ours(<<16#33, 16#33, _/bytes>>, _Opts) ->
+    % XXX hardcode
     % ipv6 multicast (RFC 2464 7.)
-    aloha_protocol:dispatch({Next, Rest, [Ether]}, Opts);
-handle_ether(#ether{dst = OurAddr} = Ether, Next, Rest, OurAddr, Opts) ->
-    aloha_protocol:dispatch({Next, Rest, [Ether]}, Opts);
-handle_ether(#ether{dst = Dst}, _Next, _Rest, _OurAddr, _Opts) ->
-    lager:info("ether not ours ~w~n", [Dst]).
+    true;
+is_ours(Addr, Opts) ->
+    OurAddr = proplists:get_value(addr, Opts),
+    Addrs = [OurAddr|proplists:get_value(auxaddrs, Opts, [])],
+    lists:any(fun(X) -> X =:= Addr end, Addrs).
