@@ -53,6 +53,7 @@ handle_cast({resolve, Req},
             #state{addrs = Addrs, used = Used, q = Q} = State) ->
     {Q2, Used2} = process_requests(Addrs, [Req], Used),
     lists:foreach(fun({Pkt, _NS, Backend}) ->
+        lager:info("sending discovery packet"),
         send_discover(Pkt, Backend)
     end, Q2),
     State2 = State#state{q = Q ++ Q2, used = Used2},
@@ -91,10 +92,12 @@ process_requests(Dict, Q, Used) ->
                 error ->
                     {error, Used3};
                 {ok, Value} = Ret ->
+                    lager:info("neigh sending a pending packet for ~p", [Key]),
                     {Ret, dict:store(Key, Value, Used3)}
             end
         end, Used2, Req, Acc)
     end, {[], dict:new()}, Q),
+    lager:info("neigh resolved ~p -> ~p", [length(Q), length(Q2)]),
     % we have finished sending pending packets for this key.
     % now update the ets table for fast-path.
     % this way the chance of packet reordering should be small enough.
