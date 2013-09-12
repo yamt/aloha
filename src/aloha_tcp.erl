@@ -32,6 +32,7 @@
 -behaviour(aloha_protocol).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
+-include("aloha_tcp_seq.hrl").
 
 handle(tcp, Pkt, Stack, Opts) ->
     [_Ip, _Ether] = Stack,
@@ -194,10 +195,11 @@ tcp_summary(#tcp{dst_port = Dst, src_port = Src, syn = Syn, ack = Ack,
                  rst = Rst, psh = Psh, fin = Fin, window = Win,
                  seqno = Seq, ackno = Ackno} = Tcp,
             Data) ->
+    SegLen = aloha_tcp_conn:seg_len(Tcp, Data),
     [integer_to_list(Src), "->", integer_to_list(Dst), " ",
      flag(Syn, "S"), flag(Ack, "A"), flag(Rst, "R"), flag(Psh, "P"),
      flag(Fin, "F"), " ",
-     "seq ", integer_to_list(Seq),
-     " len ", integer_to_list(aloha_tcp_conn:seg_len(Tcp, Data)),
+     "seq ", integer_to_list(Seq), ":", integer_to_list(?SEQ(Seq + SegLen)),
+     " len ", integer_to_list(SegLen),
      " ack ", integer_to_list(Ackno),
      " win ", integer_to_list(Win)].
