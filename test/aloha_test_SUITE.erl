@@ -201,8 +201,8 @@ tcp_close(Config) ->
         error:{badmatch, {error, econnrefused}} = E ->
             Trace = erlang:get_stacktrace(),
             case lists:keyfind(tcp_prepare, 2, Trace) of
-                {?MODULE, tcp_prepare, 5, _} -> ok;  % R15 and later
-                {?MODULE, tcp_prepare, 5} -> ok  % R14
+                {?MODULE, tcp_prepare, 6, _} -> ok;  % R15 and later
+                {?MODULE, tcp_prepare, 6} -> ok  % R14
             end,
             ct:pal("expected exception ~p", [E]),
             ok
