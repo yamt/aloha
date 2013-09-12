@@ -97,8 +97,11 @@ trim(Syn, Data, Fin, Seq, WinStart) ->
 %
 % seg_len = 0 on the right edge of the window case is also different.
 % consider: rcv_nxt = 1000, rcv_win = 500, seg_seq = 1500, seg_len = 0
-% NetBSD accepts it while this implementation rejects it.
-% Linux looks like same as NetBSD.  (tcp_validate_incoming@tcp_input.c)
+% this implementation rejects such a segment as it's out of window per rfc.
+% NetBSD accepts it.
+% Linux seems to accept it too.  (tcp_validate_incoming@tcp_input.c)
+%
+% http://www.ietf.org/proceedings/86/slides/slides-86-tcpm-4
 accept_check(_, 1, undefined, _) ->  % special case: accept syn
     true;
 accept_check(_, 0, undefined, _) ->  % special case: or rst

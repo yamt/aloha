@@ -23,7 +23,6 @@
 % SUCH DAMAGE.
 
 % random references:
-% http://www.ietf.org/proceedings/86/slides/slides-86-tcpm-4
 % http://www.bell-labs.com/user/johnlin/probing-TCP.pdf
 
 -module(aloha_tcp_conn).
