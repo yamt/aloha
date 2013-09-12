@@ -427,12 +427,7 @@ process_input(#tcp{} = Tcp, Data, State) ->
                                "~p seg_len ~p state ~p",
                                [self(), pp(Tcp), seg_len(Tcp, Data),
                                 pp(State)]),
-                    % do not send an ack as we never queue out of order
-                    % segments.  sending ack here causes peer's fast
-                    % retransmission, which somehow relies on our queueing.
-                    % see also RFC 1122 4.2.2.21
-                    % {true, State}
-                    {false, State}
+                    {true, State}
             end
     end.
 
@@ -477,7 +472,11 @@ update_receiver(#tcp{seqno = Seqno} = Tcp, Data,
     % drop out of order segment
     lager:info("TCP ~p drop out of order segment rcv_nxt ~p seqno ~p seglen ~p",
         [self(), Nxt, Seqno, seg_len(Tcp, Data)]),
-    {true, State}.
+    % do not send an ack as we never queue out of order
+    % segments.  sending ack here causes peer's fast
+    % retransmission, which somehow relies on our queueing.
+    % see also RFC 1122 4.2.2.21
+    {false, State}.
 
 segment_arrival({#tcp{ack = 0, syn = 1} = Tcp, Data}, State)
         when Data =/= <<>> ->
