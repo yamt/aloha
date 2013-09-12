@@ -141,7 +141,7 @@ send_or_acc(_LookupFun, LookupArg, {Pkt, _NS, Backend}, Acc) ->
 
 send_packet_to([Ether|Rest] = Pkt, LLAddr, Backend) ->
     lager:debug("neighbor send to ~p ~p",
-               [LLAddr, aloha_utils:pr(Pkt, ?MODULE)]),
+                [LLAddr, aloha_utils:pr(Pkt, ?MODULE)]),
     aloha_nic:send_packet([Ether#ether{dst = LLAddr}|Rest], Backend).
 
 notify(Key, Value) ->
