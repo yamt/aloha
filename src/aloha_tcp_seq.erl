@@ -90,6 +90,15 @@ trim(Syn, Data, Fin, Seq, WinStart) ->
 %
 %   >0      >0     RCV.NXT =< SEG.SEQ < RCV.NXT+RCV.WND
 %               or RCV.NXT =< SEG.SEQ+SEG.LEN-1 < RCV.NXT+RCV.WND
+%
+% NetBSD accepts a segement after window if data portion of the segment
+% (ie. excluding fin) does not beyond the window.
+% this implementation rejects such a segment.  Linux seems to reject, too.
+%
+% seg_len = 0 on the right edge of the window case is also different.
+% consider: rcv_nxt = 1000, rcv_win = 500, seg_seq = 1500, seg_len = 0
+% NetBSD accepts it while this implementation rejects it.
+% Linux looks like same as NetBSD.  (tcp_validate_incoming@tcp_input.c)
 accept_check(_, 1, undefined, _) ->  % special case: accept syn
     true;
 accept_check(_, 0, undefined, _) ->  % special case: or rst

@@ -384,15 +384,6 @@ send_to_owner(Msg, #tcp_state{owner = Owner}) ->
 % "check sequence number"
 %
 % in-window check  RFC 793 3.3. (p.26)
-%
-% NetBSD accepts a segement after window if data portion of the segment
-% (ie. excluding fin) does not beyond the window.
-% this implementation rejects such a segment.  Linux seems to reject, too.
-%
-% seg_len = 0 on the right edge of the window case is also different.
-% consider: rcv_nxt = 1000, rcv_win = 500, seg_seq = 1500, seg_len = 0
-% NetBSD accepts it while this implementation rejects it.
-% Linux looks like same as NetBSD.  (tcp_validate_incoming@tcp_input.c)
 accept_check(#tcp{syn = 0, rst = 0}, _, #tcp_state{rcv_nxt = undefined}) ->
     false;
 accept_check(#tcp{seqno = Seq} = Tcp, Data,
