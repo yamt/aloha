@@ -568,6 +568,12 @@ tcp_output(CanProbe,
         (Syn =:= 1 orelse Fin =:= 1 orelse Data =/= <<>>),
     SndWnd2 = case NeedProbe of
         true ->
+            % zero window probe.
+            % RFC 1122 4.2.2.17
+            % RFC 793 3.7 (Page 42)
+            % we uses an 1-octet segment to probe window.
+            % another approach would be to send an 1 MSS segment as
+            % Solaris 2.1 does.  ie. same as a normal retransmit
             1;
         false ->
             min(max(SndUna + SndWnd - SndNxt, 0), SMSS)
