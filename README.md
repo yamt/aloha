@@ -34,5 +34,7 @@ TODO
 - timeout
 - use gproc instead of raw ets tables?
 - handle exiting processes in accept/read/write queues
+- arp/nd timeout
 - wscale option
 - out of order segment queueing
+- rtt estimate
