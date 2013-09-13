@@ -33,7 +33,7 @@
 
 -behaviour(gen_server).
 
--record(state, {addrs = dict:new(), used = dict:new(), q = [], timer}).
+-record(state, {addrs = dict:new(), used = dict:new(), q = dict:new(), timer}).
 
 -define(CACHE_EXPIRE, 10000).
 
@@ -51,18 +51,19 @@ handle_call(_Req, _From, State) ->
 
 handle_cast({resolve, Req},
             #state{addrs = Addrs, used = Used, q = Q} = State) ->
-    {Q2, Used2} = process_requests(Addrs, [Req], Used),
+    Key = req_key(Req),
+    {L, Used2} = process_requests(Key, [Req], Addrs, Used),
     lists:foreach(fun({Pkt, _NS, Backend}) ->
         lager:info("sending discovery packet"),
         send_discover(Pkt, Backend)
-    end, Q2),
-    State2 = State#state{q = Q ++ Q2, used = Used2},
+    end, L),
+    State2 = State#state{q = dict:append_list(Key, L, Q), used = Used2},
     {noreply, State2};
 handle_cast({resolved, Key, Value},
             #state{addrs = Addrs, used = Used, q = Q} = State) ->
     Addrs2 = dict:store(Key, Value, Addrs),
-    {Q2, Used2} = process_requests(Addrs2, Q, Used),
-    State2 = State#state{addrs = Addrs2, used = Used2, q = Q2},
+    {[], Used2} = process_requests(Key, fetch_list(Key, Q), Addrs2, Used),
+    State2 = State#state{addrs = Addrs2, used = Used2, q = dict:erase(Key, Q)},
     {noreply, State2}.
 
 handle_info({timeout, Tref, cache_expire},
@@ -84,72 +85,45 @@ terminate(Reason, _State) ->
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
-process_requests(Dict, Q, Used) ->
-    {Q2, Used2} = lists:foldl(fun(Req, {Acc, Used2}) ->
-        send_or_acc(fun(Key, Used3) ->
-            Used3 = Used2,
-            case dict:find(Key, Dict) of
-                error ->
-                    {error, Used3};
-                {ok, Value} = Ret ->
-                    lager:info("neigh sending a pending packet for ~p", [Key]),
-                    {Ret, dict:store(Key, Value, Used3)}
-            end
-        end, Used2, Req, Acc)
-    end, {[], dict:new()}, Q),
-    lager:info("neigh resolved ~p -> ~p", [length(Q), length(Q2)]),
-    % we have finished sending pending packets for this key.
-    % now update the ets table for fast-path.
-    % this way the chance of packet reordering should be small enough.
-    true = dict:fold(fun(Key, Value, true) ->
-        ets:insert(?MODULE, {Key, Value})
-    end, true, Used2),
-    {Q2, dict:merge(fun(_Key, _Value1, Value2) -> Value2 end, Used, Used2)}.
-
-send_packet(Pkt, NS, Backend) ->
-    {List, ?MODULE} =
-        send_or_acc(fun lookup_cache/2, ?MODULE, {Pkt, NS, Backend}, []),
-    lists:foreach(fun(X) ->
-        gen_server:cast(?MODULE, {resolve, X}) end,
-    List).
-
-lookup_cache(Key, Dict) ->
-    case catch ets:lookup_element(Dict, Key, 2) of
-        {'EXIT', _} ->
-            {error, Dict};  % compat with dict:find/2
-        LLAddr ->
-            {{ok, LLAddr}, Dict}
+fetch_list(Key, Dict) ->
+    case dict:find(Key, Dict) of
+        error -> [];
+        {ok, List} -> List
     end.
 
-send_or_acc(LookupFun, LookupArg,
-            {[#ether{}, L2|_] = Pkt, NS, Backend} = Req,
-            %{[#ether{dst = <<0,0,0,0,0,0>>}, L2|_] = Pkt, NS, Backend} = Req,
-            Acc) ->
-    Key = key(L2, NS),
-    {Result, LookupArg2} = LookupFun(Key, LookupArg),
-    {case Result of
+process_requests(Key, List, Db, Used) ->
+    case dict:find(Key, Db) of
         error ->
-            lager:debug("neighbor not found for key ~p", [Key]),
-            [Req|Acc];
+            {List, Used};
         {ok, LLAddr} ->
-            send_packet_to(Pkt, LLAddr, Backend),
-            Acc
-    end, LookupArg2};
-send_or_acc(_LookupFun, LookupArg, {Pkt, _NS, Backend}, Acc) ->
-    aloha_nic:send_packet(Pkt, Backend),
-    {Acc, LookupArg}.
+            lists:foreach(fun(Req) ->
+                send_packet_to(Req, LLAddr)
+            end, List),
+            % we have finished sending pending packets for this key.
+            % now update the ets table for fast-path.
+            % this way the chance of packet reordering should be small enough.
+            ets:insert(?MODULE, {Key, LLAddr}),
+            {[], dict:store(Key, LLAddr, Used)}
+    end.
 
-send_packet_to([Ether|Rest] = Pkt, LLAddr, Backend) ->
+send_packet(Pkt, NS, Backend) ->
+    Req = {Pkt, NS, Backend},
+    Key = req_key(Req),
+    case catch ets:lookup_element(?MODULE, Key, 2) of
+        {'EXIT', _} ->
+            lager:debug("neighbor not found for key ~p", [Key]),
+            gen_server:cast(?MODULE, {resolve, Req});
+        LLAddr ->
+            send_packet_to(Req, LLAddr)
+    end.
+
+send_packet_to({[Ether|Rest] = Pkt, _NS, Backend}, LLAddr) ->
     lager:debug("neighbor send to ~p ~p",
                 [LLAddr, aloha_utils:pr(Pkt, ?MODULE)]),
     aloha_nic:send_packet([Ether#ether{dst = LLAddr}|Rest], Backend).
 
-notify(Key, Value) ->
-    lager:debug("neighbor key ~p value ~p", [Key, Value]),
-    gen_server:cast(?MODULE, {resolved, Key, Value}).
-
-discover_module(ip) -> aloha_arp;
-discover_module(ipv6) -> aloha_icmpv6.
+req_key({[#ether{}, L2|_], NS, _Backend}) ->
+    key(L2, NS).
 
 key(L2, NS) ->
     {Proto, Dst, _Src} = extract_l2(L2),
@@ -157,6 +131,13 @@ key(L2, NS) ->
 
 extract_l2(#ip{dst = Dst, src = Src}) -> {ip, Dst, Src};
 extract_l2(#ipv6{dst = Dst, src = Src}) -> {ipv6, Dst, Src}.
+
+notify(Key, Value) ->
+    lager:debug("neighbor key ~p value ~p", [Key, Value]),
+    gen_server:cast(?MODULE, {resolved, Key, Value}).
+
+discover_module(ip) -> aloha_arp;
+discover_module(ipv6) -> aloha_icmpv6.
 
 send_discover([#ether{src = L1Src}, L2|_], Backend) ->
     {Protocol, Dst, Src} = extract_l2(L2),
