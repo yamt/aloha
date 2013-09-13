@@ -475,6 +475,27 @@ update_receiver(#tcp{seqno = Seqno} = Tcp, Data,
     % segments.  sending ack here causes peer's fast
     % retransmission, which somehow relies on our queueing.
     % see also RFC 1122 4.2.2.21
+    %
+    % XXX
+    % linux (Ubuntu-Server 12.04.1 LTS 3.2.0-29-generic) somehow sends us
+    % new data skipping unacked segments during loss recovery.  it makes
+    % the transfer very slow.  (mostly stall)
+    %
+    %    Ours <- Linux   seq 1000:2000
+    %    Ours <- Linux   seq 3000:4000 (reordered?  we drop this)
+    %    Ours <- Linux   seq 2000:3000 (reordered?)
+    %    Ours <- Linux   seq 4000:5000 (we drop this)
+    %
+    %    Ours <- Linux   seq 3000:4000 (retransmit)
+    %    Ours -> Linux   ack 4000
+    %    Ours <- Linux   seq 6000:7000 (???  we drop this)
+    %
+    %    Ours <- Linux   seq 4000:5000 (retransmit)
+    %    Ours -> Linux   ack 5000
+    %    Ours <- Linux   seq 7000:8000 (???  we drop this)
+    %
+    % (the same sequence continues for hours at least,
+    % getting slower and slower)
     {false, State}.
 
 segment_arrival({#tcp{ack = 0, syn = 1} = Tcp, Data}, State)
