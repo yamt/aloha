@@ -22,10 +22,9 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
-{application, aloha,
- [{description, "network stack"},
-  {vsn, "1.0"},
-  {applications,
-   [kernel,
-    stdlib]},
-  {mod, {aloha_app, []}}]}.
+-module(aloha).
+
+-export([start/0]).
+
+start() ->
+    lists:foreach(fun(App) -> application:start(App) end, [?MODULE]).

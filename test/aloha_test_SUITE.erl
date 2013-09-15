@@ -88,21 +88,11 @@ init_per_suite(Config) ->
     lager:start(),
     lager:set_loglevel(lager_file_backend, "console.log", warning),
     application:start(sasl),
-    Owner = proc_lib:spawn(fun() ->
-        aloha_tables:init_tables(),
-        receive
-            _M -> ok
-        end
-    end),
-    {ok, Pid} = aloha_neighbor:start_link(),
-    unlink(Pid),
-    [{owner, Owner}, {neighbor, Pid}|Config].
+    ok = aloha:start(),
+    Config.
 
 end_per_suite(Config) ->
-    Owner = ?config(neighbor, Config),
-    Pid = ?config(neighbor, Config),
-    kill_and_wait([Owner, Pid]),
-    aloha_tables:fini_tables(),
+    ok = application:stop(aloha),
     ok.
 
 init_per_group(loopback, Config) ->

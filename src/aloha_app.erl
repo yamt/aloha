@@ -22,10 +22,17 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
-{application, aloha,
- [{description, "network stack"},
-  {vsn, "1.0"},
-  {applications,
-   [kernel,
-    stdlib]},
-  {mod, {aloha_app, []}}]}.
+-module(aloha_app).
+
+-behaviour(application).
+
+-export([start/2, stop/1]).
+
+start(_StartType, _StartArgs) ->
+    aloha_tables:init_tables(),
+    {ok, Pid} = aloha_sup:start_link(),
+    {ok, Pid, {}}.
+
+stop({}) ->
+    aloha_tables:fini_tables(),
+    ok.

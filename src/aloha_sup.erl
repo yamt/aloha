@@ -22,10 +22,19 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
-{application, aloha,
- [{description, "network stack"},
-  {vsn, "1.0"},
-  {applications,
-   [kernel,
-    stdlib]},
-  {mod, {aloha_app, []}}]}.
+-module(aloha_sup).
+
+-behaviour(supervisor).
+
+-export([start_link/0]).
+
+-export([init/1]).
+
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+init([]) ->
+    {ok, {{one_for_one, 5, 10}, [
+        {aloha_neighbor, {aloha_neighbor, start_link, []},
+         permanent, brutal_kill, worker, [gen_server]}
+    ]}}.

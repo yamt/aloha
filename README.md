@@ -37,5 +37,4 @@ TODO
 - wscale option
 - out of order segment queueing
 - rtt estimate
-- make this application:start/1'able
 - make aloha_nic a separate app
