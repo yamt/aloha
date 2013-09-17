@@ -406,9 +406,8 @@ process_input(#tcp{} = Tcp, Data, State) ->
             % "check the RST bit"
             % "check the SYN bit"
             % "check the FIN bit"
-            State3 = update_state_on_flags(Tcp2, State2),
             % "process the segment text"
-            update_receiver(Tcp2, Data2, State3);
+            update_receiver(Tcp2, Data2, State2);
         false ->
             case {State#tcp_state.owner, seg_len(Tcp, Data)} of
                 {none, Len} when Len =/= 0 ->
@@ -446,10 +445,10 @@ cancel_delack(#tcp_state{delack_timer = TRef} = State) ->
     State#tcp_state{delack_timer = undefined}.
 
 % "process the segment text"
-update_receiver(#tcp{syn = 1, seqno = Seq}, <<>>,
-                #tcp_state{rcv_nxt = undefined, state = TcpState} = State) ->
-    true = TcpState =:= established orelse TcpState =:= syn_received,
-    {true, State#tcp_state{rcv_nxt = Seq + 1}};
+update_receiver(#tcp{syn = 1, seqno = Seq} = Tcp, <<>>,
+                #tcp_state{rcv_nxt = undefined} = State) ->
+    State2 = update_state_on_flags(Tcp, State),
+    {true, State2#tcp_state{rcv_nxt = Seq + 1}};
 update_receiver(#tcp{seqno = Seq} = Tcp, Data,
                 #tcp_state{rcv_nxt = Seq, owner = none} = State)
                 when Data =/= <<>> ->
@@ -461,11 +460,12 @@ update_receiver(#tcp{seqno = Seq} = Tcp, Data,
 update_receiver(#tcp{seqno = Seq, fin = Fin} = Tcp, Data,
                 #tcp_state{rcv_nxt = Seq} = State) ->
     lager:debug("appending ~p bytes to rcv_buf ~p", [byte_size(Data), Data]),
-    RcvBuf = <<(State#tcp_state.rcv_buf)/bytes, Data/bytes>>,
+    State2 = update_state_on_flags(Tcp, State),
+    RcvBuf = <<(State2#tcp_state.rcv_buf)/bytes, Data/bytes>>,
     Nxt = calc_next_seq(Tcp, Data),
-    {AckNow, State2} = setup_ack(Nxt, State),
-    State3 = State2#tcp_state{rcv_nxt = Nxt, rcv_buf = RcvBuf},
-    {AckNow orelse Fin =:= 1, State3};
+    {AckNow, State3} = setup_ack(Nxt, State2),
+    State4 = State3#tcp_state{rcv_nxt = Nxt, rcv_buf = RcvBuf},
+    {AckNow orelse Fin =:= 1, State4};
 update_receiver(#tcp{seqno = Seqno} = Tcp, Data,
                 #tcp_state{rcv_nxt = Nxt} = State) ->
     % drop out of order segment
