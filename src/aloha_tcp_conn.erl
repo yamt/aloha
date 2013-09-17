@@ -44,6 +44,7 @@
 -record(tcp_state, {
     snd_una :: tcp_seq(),
     snd_nxt :: tcp_seq(),
+    snd_max :: tcp_seq(),
     snd_wnd :: non_neg_integer(),
     snd_buf :: binary() | non_neg_integer(),
     snd_buf_size :: non_neg_integer(),
@@ -96,6 +97,7 @@ init(Opts) ->
     State = #tcp_state{backend = Backend,
                        template = Tmpl,
                        snd_nxt = ISS,
+                       snd_max = ISS,
                        snd_una = ISS,
                        snd_buf = <<>>,
                        snd_buf_size = proplists:get_value(snd_buf, Opts, 3000),
@@ -277,19 +279,35 @@ seg_len(#tcp{syn = Syn, fin = Fin}, Data) ->
 calc_next_seq(#tcp{seqno = Seq} = Tcp, Data) ->
     ?SEQ(Seq + seg_len(Tcp, Data)).
 
+seq_max(Seq1, Seq2) when ?SEQ_LT(Seq1, Seq2) ->
+    Seq2;
+seq_max(Seq1, _Seq2) ->
+    Seq1.
+
 % "check the ACK field"
 %
 % advance SND.UNA and truncate send buffer
-% SND.UNA <= SEG.ACK =< SND.NXT  see RFC 1122 4.2.2.20 (g)
+% SND.UNA <= SEG.ACK <= SND.NXT  see RFC 1122 4.2.2.20 (g)
+%
+% we use the following varient to deal the case ZWP is accepted by the peer.
+% SND.UNA <= SEG.ACK <= SND.MAX
+% an important case:
+%  1. a window update from the peer was lost.
+%  2. we send a zwp.  this doesn't advance snd_nxt.
+%  3. the peer accepts the zwp (as his window is actually non-zero)
+%     and acks it.
+%  4. we reject the ack as it's after our snd_nxt.  and thus still think
+%     the peer's window is closed.
 process_ack(#tcp{ack = 1, ackno = Ack, window = Wnd},
-            #tcp_state{snd_una = Una, snd_nxt = Nxt,
+            #tcp_state{snd_una = Una, snd_nxt = Nxt, snd_max = Max,
                        snd_syn = Syn, snd_buf = SndBuf,
                        snd_fin = Fin} = State) when
-            ?SEQ_LTE(Una, Ack) andalso ?SEQ_LTE(Ack, Nxt) ->
+            ?SEQ_LTE(Una, Ack) andalso ?SEQ_LTE(Ack, Max) ->
     lager:info("TCP ~p ACKed ~p-~p", [self(), Una, Ack]),
     {Syn2, SndBuf2, Fin2, Ack} = aloha_tcp_seq:trim(Syn, SndBuf, Fin, Una, Ack),
     State2 = update_state_on_ack(Syn2 =/= Syn, Fin2 =/= Fin, State),
-    State3 = State2#tcp_state{snd_una = Ack, snd_syn = Syn2, snd_buf = SndBuf2,
+    State3 = State2#tcp_state{snd_una = Ack, snd_nxt = seq_max(Nxt, Ack),
+                              snd_syn = Syn2, snd_buf = SndBuf2,
                               snd_fin = Fin2, snd_wnd = Wnd},
     process_writers(State3);
 process_ack(#tcp{ack = 0}, State) ->
@@ -647,6 +665,7 @@ push(_, _, _, _) -> 0.
 
 build_and_send_packet(Syn, Data, Fin, Win,
                       #tcp_state{snd_nxt = SndNxt,
+                                 snd_max = SndMax,
                                  rcv_nxt = RcvNxt,
                                  backend = Backend,
                                  rcv_mss = RMSS,
@@ -671,7 +690,9 @@ build_and_send_packet(Syn, Data, Fin, Win,
     Pkt = [Ether, Ip, Tcp, Data],
     aloha_tcp:send_packet(Pkt, NS, Backend),
     adv_win_check(Adv, State),
-    State#tcp_state{snd_nxt = calc_next_seq(Tcp, Data), rcv_adv = Adv}.
+    SndNxt2 = calc_next_seq(Tcp, Data),
+    State#tcp_state{snd_nxt = SndNxt2, snd_max = seq_max(SndMax, SndNxt2),
+                    rcv_adv = Adv}.
 
 adv_win_check(_, #tcp_state{rcv_adv = undefined}) ->
     ok;
