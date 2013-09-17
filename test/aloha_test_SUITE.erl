@@ -55,12 +55,12 @@ suite() ->
 
 timetrap() ->
     case os:getenv("TRAVIS") of
-        false -> 5000;
+        false -> 10000;
         _ -> 1800000
     end.
 
 all() ->
-    [{group, loopback}].
+    [{group, all}].
 
 groups() ->
     Tests = [
@@ -75,10 +75,16 @@ groups() ->
         {group, ipv4},
         {group, ipv6}
     ],
-    [{loopback, [], [
+    Modes = [
         {group, async},
         {group, sync}
+    ],
+    [{all, [parallel], [
+        {group, loopback},
+        {group, lossyloopback}
      ]},
+     {loopback, [parallel], Modes},
+     {lossyloopback, [parallel], Modes},
      {async, [parallel], Protocols},
      {sync,  [parallel], Protocols},
      {ipv4, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests},
@@ -91,68 +97,95 @@ init_per_suite(Config) ->
     ok = aloha:start(),
     Config.
 
-end_per_suite(Config) ->
+end_per_suite(_Config) ->
     ok = application:stop(aloha),
     ok.
 
+init_per_group(all, Config) ->
+    Config;
 init_per_group(loopback, Config) ->
-    HwAddr = <<16#0003478ca1b3:48>>,  % taken from my unused machine
-    {ok, Pid} = aloha_nic_loopback:create(?MODULE, HwAddr),
-    ok = gen_server:call(Pid, {setopts, [{ip, <<127,0,0,1>>},
-                                         {ipv6, <<1:128>>}]}),
-    [{loopback, Pid}|Config];
+    [{loopback_mod, aloha_nic_loopback}, {namespace, loopback}|Config];
+init_per_group(lossyloopback, Config) ->
+    [{loopback_mod, aloha_nic_lossyloopback},
+     {namespace, lossyloopback}|Config];
 init_per_group(async, Config) ->
-    Config2 = [{mode, async}|Config],
+    NS = ?config(namespace, Config),
+    NS2 = {NS, async},
+    Mod = ?config(loopback_mod, Config),
+    Pid = start_loopback(NS2, Mod),
+    Config2 = [{mode, async}, {namespace, NS2}|Config],
     Servers = start_servers(Config2),
-    [{servers, Servers}|Config2];
+    [{servers, Servers}, {loopback, Pid}|Config2];
 init_per_group(sync, Config) ->
-    Config2 = [{mode, sync}|Config],
+    NS = ?config(namespace, Config),
+    NS2 = {NS, sync},
+    Mod = ?config(loopback_mod, Config),
+    Pid = start_loopback(NS2, Mod),
+    Config2 = [{mode, sync}, {namespace, NS2}|Config],
     Servers = start_servers(Config2),
-    [{servers, Servers}|Config2];
+    [{servers, Servers}, {loopback, Pid}|Config2];
 init_per_group(ipv4, Config) ->
     [{proto, ipv4}, {ip, <<127,0,0,1>>}|Config];
 init_per_group(ipv6, Config) ->
     [{proto, ipv6}, {ip, <<1:128>>}|Config].
 
+start_loopback(NS, Mod) ->
+    HwAddr = <<16#0003478ca1b3:48>>,  % taken from my unused machine
+    {ok, Pid} = Mod:create(NS, HwAddr),
+    ok = gen_server:call(Pid, {setopts, [{ip, <<127,0,0,1>>},
+                                         {ipv6, <<1:128>>}]}),
+    Pid.
+
 start_servers(Config) ->
+    NS = ?config(namespace, Config),
     lists:map(fun({Port, Fun}) ->
-        proc_lib:spawn(fun() -> tcp_server(?MODULE, Port, Fun, Config) end)
+        proc_lib:spawn(fun() -> tcp_server(NS, Port, Fun, Config) end)
     end, [
         {?ECHO_PORT, fun echo_loop/2},
         {?DISCARD_PORT, fun discard_loop/2},
         {?CLOSE_PORT, fun closer/2}
     ]).
 
-end_per_group(loopback, Config) ->
-    Pid = ?config(loopback, Config),
-    kill_and_wait([Pid]);
+end_per_group(all, _Config) ->
+    ok;
+end_per_group(loopback, _Config) ->
+    ok;
+end_per_group(lossyloopback, _Config) ->
+    ok;
 end_per_group(async, Config) ->
+    Pid = ?config(loopback, Config),
     Servers = ?config(servers, Config),
-    kill_and_wait(Servers);
+    kill_and_wait([Pid|Servers]);
 end_per_group(sync, Config) ->
+    Pid = ?config(loopback, Config),
     Servers = ?config(servers, Config),
-    kill_and_wait(Servers);
+    kill_and_wait([Pid|Servers]);
 end_per_group(ipv4, _Config) ->
     ok;
 end_per_group(ipv6, _Config) ->
     ok.
 
 tcp_self_connect(Config) ->
+    ct:pal("self ~p", [self()]),
     IP = ?config(ip, Config),
     tcp_send_and_recv(IP, ?SELF_PORT, IP, ?SELF_PORT, Config).
 
 tcp_echo(Config) ->
+    ct:pal("self ~p", [self()]),
     IP = ?config(ip, Config),
-    tcp_send_and_recv(IP, ?ECHO_PORT, IP, ?LOCAL_PORT, Config).
+    tcp_send_and_recv(IP, ?ECHO_PORT, IP, choose_local_port(Config), Config).
 
 tcp_bulk_transfer(Config) ->
+    ct:pal("self ~p", [self()]),
     IP = ?config(ip, Config),
-    tcp_send(IP, ?DISCARD_PORT, IP, ?LOCAL_PORT, Config).
+    tcp_send(IP, ?DISCARD_PORT, IP, choose_local_port(Config), Config).
 
 tcp_unlisten(Config) ->
+    ct:pal("self ~p", [self()]),
     IP = ?config(ip, Config),
     try
-        tcp_send_and_recv(IP, ?UNLISTEN_PORT, IP, ?LOCAL_PORT, Config)
+        tcp_send_and_recv(IP, ?UNLISTEN_PORT, IP, choose_local_port(Config),
+                          Config)
     catch
         error:{badmatch, {error, econnrefused}} = E ->
             ct:pal("expected exception ~p", [E]),
@@ -160,28 +193,36 @@ tcp_unlisten(Config) ->
     end.
 
 tcp_recv_timeout(Config) ->
+    ct:pal("self ~p", [self()]),
     IP = ?config(ip, Config),
     Msg = <<"hi!">>,
     MsgSize = byte_size(Msg),
-    Sock = tcp_prepare(IP, ?ECHO_PORT, IP, ?LOCAL_PORT + 1, 3000, Config),
+    Sock = tcp_prepare(IP, ?ECHO_PORT, IP, choose_local_port(Config), 3000,
+                       Config),
     ok = aloha_socket:send(Sock, Msg),
     Timeout = 200,
-    {ok, Msg} = case recv(Sock, MsgSize * 2, Timeout, Config) of
+    Timeout2 = Timeout + case ?config(loopback_mod, Config) of
+        aloha_nic_lossyloopback -> 2000;
+        _ -> 0
+    end,
+    {ok, Msg} = case recv(Sock, MsgSize * 2, Timeout2, Config) of
         {ok, Msg} = Ret -> Ret;
         {error, timeout} ->
             ct:pal("trying longer timeout"),
-            recv(Sock, MsgSize * 2, Timeout * 5, Config)
+            recv(Sock, MsgSize * 2, Timeout2 * 5, Config)
     end,
     {error, timeout} = recv(Sock, MsgSize * 2, Timeout, Config),
     ok = aloha_socket:shutdown(Sock, write),
-    {error, closed} = recv(Sock, MsgSize, Timeout, Config),
+    {error, closed} = recv(Sock, MsgSize, Timeout2, Config),
     ok = aloha_socket:close(Sock),
     tcp_cleanup(Sock).
 
 tcp_close(Config) ->
+    ct:pal("self ~p", [self()]),
     IP = ?config(ip, Config),
     try
-        tcp_send_and_recv(IP, ?CLOSE_PORT, IP, ?LOCAL_PORT, Config)
+        tcp_send_and_recv(IP, ?CLOSE_PORT, IP, choose_local_port(Config),
+                          Config)
     catch
         error:{badmatch, {error, econnreset}} = E ->
             Trace = erlang:get_stacktrace(),
@@ -199,11 +240,12 @@ tcp_close(Config) ->
     end.
 
 make_data() ->
-    iolist_to_binary(lists:map(fun(_) -> <<"hello!">> end,
-                     lists:seq(1, 3000))).
+    iolist_to_binary(lists:map(fun(X) -> io_lib:format("~9..0w|", [X]) end,
+                     lists:seq(1, 1800))).
 
 tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, MsgSize,
             Config) ->
+    NS = ?config(namespace, Config),
     Nic = ?config(loopback, Config),
     ActiveOpts = active_opts(Config),
     {ok, Opts} = gen_server:call(Nic, getopts),
@@ -211,8 +253,7 @@ tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, MsgSize,
     Mtu = proplists:get_value(mtu, Opts),
     Backend = proplists:get_value(backend, Opts),
     ct:pal("connecting"),
-    {ok, Sock} = aloha_tcp:connect(?MODULE, RemoteIPAddr, RemotePort, Addr,
-                                   Backend,
+    {ok, Sock} = aloha_tcp:connect(NS, RemoteIPAddr, RemotePort, Addr, Backend,
                                    [{ip, LocalIPAddr}, {port, LocalPort},
                                     {mtu, Mtu}, {rcv_buf, MsgSize}|ActiveOpts]),
     PeerName = {aloha_addr:to_ip(RemoteIPAddr), RemotePort},
@@ -304,6 +345,9 @@ tcp_send(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
     ct:pal("close"),
     ok = aloha_socket:close(Sock),
     tcp_cleanup(Sock).
+
+choose_local_port(_Config) ->
+    ?LOCAL_PORT + crypto:rand_uniform(0, 10000).
 
 kill_and_wait(Pid) when is_pid(Pid) ->
     kill_and_wait([Pid]);
