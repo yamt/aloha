@@ -191,6 +191,7 @@ tcp_unlisten(Config) ->
             ct:pal("expected exception ~p", [E]),
             ok
     end.
+    % XXX tcp_cleanup
 
 tcp_recv_timeout(Config) ->
     ct:pal("self ~p", [self()]),
@@ -238,6 +239,7 @@ tcp_close(Config) ->
             ct:pal("expected exception ~p", [E]),
             ok
     end.
+    % XXX tcp_cleanup
 
 make_data() ->
     iolist_to_binary(lists:map(fun(X) -> io_lib:format("~9..0w|", [X]) end,
