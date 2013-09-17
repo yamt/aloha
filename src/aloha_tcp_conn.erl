@@ -610,10 +610,10 @@ tcp_output(CanProbe,
             % do not advance snd_nxt for zwp.  otherwise our ack and window
             % updates will be out of the peer's window.
             State4 = case NeedProbe of
-                true -> State3#tcp_state{snd_nxt = State2#tcp_state.snd_nxt};
+                true -> State3#tcp_state{snd_nxt = SndNxt};
                 _ -> State3
             end,
-            State5 = might_renew_timer(true, NeedProbe, State4),
+            State5 = might_renew_timer(SndNxt =:= SndUna, NeedProbe, State4),
             tcp_output(State5);  % burst transmit
         false ->
             might_renew_timer(false, NeedProbe, State)
