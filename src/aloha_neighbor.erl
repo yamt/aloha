@@ -36,7 +36,7 @@
 -record(state, {addrs = dict:new(), used = dict:new(),
                 q = dict:new(), oldq = dict:new(), timer}).
 
--define(CACHE_EXPIRE, 10000).
+-define(CACHE_EXPIRE, 2000).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
