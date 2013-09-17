@@ -111,8 +111,8 @@ init(Opts) ->
                        owner = Owner,
                        key = Key,
                        namespace = NS},
-    lager:info("TCP ~p init for ~p ~p",
-               [self(), sockname(Tmpl), peername(Tmpl)]),
+    lager:info("TCP ~p init for ~p ~p ~p",
+               [self(), sockname(Tmpl), peername(Tmpl), Key]),
     true = ets:insert_new(?MODULE, {Key, self()}),
     link(Owner),
     {ok, State}.
