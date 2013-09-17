@@ -67,7 +67,8 @@ handle_info(Info, State) ->
     lager:info("handle_info: ~p", [Info]),
     {noreply, State}.
 
-terminate(_Reason, #state{opts = Opts}) ->
+terminate(Reason, #state{opts = Opts}) ->
+    lager:info("terminate with reason ~p", [Reason]),
     Key = proplists:get_value(key, Opts),
     true = ets:delete(?MODULE, Key),
     ok.
