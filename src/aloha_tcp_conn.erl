@@ -289,9 +289,9 @@ seq_max(Seq1, _Seq2) ->
 % advance SND.UNA and truncate send buffer
 % SND.UNA <= SEG.ACK <= SND.NXT  see RFC 1122 4.2.2.20 (g)
 %
-% we use the following varient to deal the case ZWP is accepted by the peer.
+% we use the following variant to deal the case ZWP is accepted by the peer.
 % SND.UNA <= SEG.ACK <= SND.MAX
-% an important case:
+% why?  an important case:
 %  1. a window update from the peer was lost.
 %  2. we send a zwp.  this doesn't advance snd_nxt.
 %  3. the peer accepts the zwp (as his window is actually non-zero)
