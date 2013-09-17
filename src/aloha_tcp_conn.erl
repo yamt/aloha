@@ -443,6 +443,10 @@ process_input(#tcp{} = Tcp, Data, State) ->
                                "~p seg_len ~p state ~p",
                                [self(), pp(Tcp), seg_len(Tcp, Data),
                                 pp(State)]),
+                    % XXX retransmitted syn also comes here and we
+                    % end up sending ack without syn.  probably
+                    % we should not advance snd_nxt when sending
+                    % syn+ack?
                     {true, State}
             end
     end.
