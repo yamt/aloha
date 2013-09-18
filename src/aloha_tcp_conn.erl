@@ -296,8 +296,8 @@ seq_max(Seq1, _Seq2) ->
 %  2. we send a zwp.  this doesn't advance snd_nxt.
 %  3. the peer accepts the zwp (as his window is actually non-zero)
 %     and acks it.
-%  4. we reject the ack as it's after our snd_nxt.  and thus still think
-%     the peer's window is closed.
+%  4. if we use snd_nxt, we would reject the ack as it's after our snd_nxt.
+%     and thus still think the peer's window is closed.
 process_ack(#tcp{ack = 1, ackno = Ack, window = Wnd},
             #tcp_state{snd_una = Una, snd_nxt = Nxt, snd_max = Max,
                        snd_syn = Syn, snd_buf = SndBuf,
