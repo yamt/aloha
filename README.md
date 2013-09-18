@@ -38,4 +38,3 @@ TODO
 - out of order segment queueing
 - rtt estimate
 - make aloha_nic a separate app
-- separate neighbor cache expiry and request timeout
