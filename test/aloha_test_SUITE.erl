@@ -55,7 +55,7 @@ suite() ->
 
 timetrap() ->
     case os:getenv("TRAVIS") of
-        false -> 10000;
+        false -> 20000;
         _ -> 1800000
     end.
 
@@ -84,7 +84,7 @@ groups() ->
         {group, lossyloopback}
      ]},
      {loopback, [parallel], Modes},
-     {lossyloopback, [parallel], Modes},
+     {lossyloopback, [parallel], Modes ++ Modes},
      {async, [parallel], Protocols},
      {sync,  [parallel], Protocols},
      {ipv4, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests},
@@ -95,6 +95,7 @@ init_per_suite(Config) ->
     lager:set_loglevel(lager_file_backend, "console.log", warning),
     application:start(sasl),
     ok = aloha:start(),
+    proc_lib:spawn(fun neighbor_flusher/0),
     Config.
 
 end_per_suite(_Config) ->
@@ -110,7 +111,7 @@ init_per_group(lossyloopback, Config) ->
      {namespace, lossyloopback}|Config];
 init_per_group(async, Config) ->
     NS = ?config(namespace, Config),
-    NS2 = {NS, async},
+    NS2 = {NS, async, make_ref()},
     Mod = ?config(loopback_mod, Config),
     Pid = start_loopback(NS2, Mod),
     Config2 = [{mode, async}, {namespace, NS2}|Config],
@@ -118,7 +119,7 @@ init_per_group(async, Config) ->
     [{servers, Servers}, {loopback, Pid}|Config2];
 init_per_group(sync, Config) ->
     NS = ?config(namespace, Config),
-    NS2 = {NS, sync},
+    NS2 = {NS, sync, make_ref()},
     Mod = ?config(loopback_mod, Config),
     Pid = start_loopback(NS2, Mod),
     Config2 = [{mode, sync}, {namespace, NS2}|Config],
@@ -416,3 +417,8 @@ discard_loop(Sock, Config) ->
 
 closer(Sock, _Config) ->
     aloha_socket:close(Sock).
+
+neighbor_flusher() ->
+    aloha_neighbor:clear(),
+    timer:sleep(1000),
+    neighbor_flusher().
