@@ -84,7 +84,7 @@ groups() ->
         {group, lossyloopback}
      ]},
      {loopback, [parallel], Modes},
-     {lossyloopback, [parallel], Modes ++ Modes},
+     {lossyloopback, [parallel], Modes},
      {async, [parallel], Protocols},
      {sync,  [parallel], Protocols},
      {ipv4, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests},
@@ -420,5 +420,5 @@ closer(Sock, _Config) ->
 
 neighbor_flusher() ->
     aloha_neighbor:clear(),
-    timer:sleep(1000),
+    timer:sleep(5000),
     neighbor_flusher().
