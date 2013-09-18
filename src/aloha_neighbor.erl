@@ -33,10 +33,10 @@
 
 -behaviour(gen_server).
 
--record(state, {addrs = dict:new(), used = dict:new(),
-                q = dict:new(), oldq = dict:new(), timer}).
+-record(state, {addrs = dict:new(), used = dict:new(), q = dict:new(), timer}).
 
--define(CACHE_EXPIRE, 2000).
+-define(CACHE_EXPIRE, 10000).
+-define(REQUEST_TIMEOUT, 800).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -51,13 +51,18 @@ handle_call(_Req, _From, State) ->
     {noreply, State}.
 
 handle_cast({resolve, Req},
-            #state{addrs = Addrs, used = Used, q = Q, oldq = OldQ} = State) ->
+            #state{addrs = Addrs, used = Used, q = Q} = State) ->
     Key = req_key(Req),
     {L, Used2} = process_requests(Key, [Req], Addrs, Used),
-    Q2 = case {L, dict:find(Key, Q), dict:find(Key, OldQ)} of
-        {[{Pkt, _NS, Backend}], error, error} ->
+    % start a discovery packet only if
+    %  1. it wasn't resolved above  (L =/= [])
+    %  2. the key is not in the queue
+    Q2 = case {L, dict:find(Key, Q)} of
+        {[{Pkt, _NS, Backend}], error} ->
             lager:info("sending discovery packet for ~p", [Key]),
             send_discover(Pkt, Backend),
+            erlang:start_timer(?REQUEST_TIMEOUT, self(),
+                               {request_timeout, Key}),
             dict:append_list(Key, L, Q);
         _ ->
             Q
@@ -65,24 +70,29 @@ handle_cast({resolve, Req},
     State2 = State#state{q = Q2, used = Used2},
     {noreply, State2};
 handle_cast({resolved, Key, Value},
-            #state{addrs = Addrs, used = Used, q = Q, oldq = OldQ} = State) ->
+            #state{addrs = Addrs, used = Used, q = Q} = State) ->
     Addrs2 = dict:store(Key, Value, Addrs),
     {[], Used2} = process_requests(Key, fetch_list(Key, Q), Addrs2, Used),
-    {[], Used3} = process_requests(Key, fetch_list(Key, OldQ), Addrs2, Used2),
-    State2 = State#state{addrs = Addrs2, used = Used3,
-                         q = dict:erase(Key, Q), oldq = dict:erase(Key, OldQ)},
+    State2 = State#state{addrs = Addrs2, used = Used2, q = dict:erase(Key, Q)},
     {noreply, State2}.
 
 handle_info({timeout, Tref, cache_expire},
-            #state{timer = Tref, addrs = Addrs, used = Used,
-                   q = Q, oldq = OldQ} = State) ->
+            #state{timer = Tref, addrs = Addrs, used = Used} = State) ->
     lager:info("neighbor cache expire ~p -> ~p",
                [dict:size(Addrs), dict:size(Used)]),
-    lager:info("neighbor discovery timeout for ~p", [dict:to_list(OldQ)]),
     ets:delete_all_objects(?MODULE),
     Tref2 = erlang:start_timer(?CACHE_EXPIRE, self(), cache_expire),
-    State2 = State#state{addrs = Used, used = dict:new(),
-                         q = dict:new(), oldq = Q, timer = Tref2},
+    State2 = State#state{addrs = Used, used = dict:new(), timer = Tref2},
+    {noreply, State2};
+handle_info({timeout, _Tref, {request_timeout, Key}}, #state{q = Q} = State) ->
+    State2 = case dict:find(Key, Q) of
+        error ->
+            State;
+        L ->
+            lager:info("neighbor discovery request timeout for key ~p reqs ~p",
+                       [key, L]),
+            State#state{q = dict:erase(Key, Q)}
+    end,
     {noreply, State2};
 handle_info(Info, State) ->
     lager:info("handle_info: ~p", [Info]),
