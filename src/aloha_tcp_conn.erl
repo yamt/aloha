@@ -516,8 +516,8 @@ update_receiver(#tcp{seqno = Seqno} = Tcp, Data,
     %    Ours -> Linux   ack 5000
     %    Ours <- Linux   seq 7000:8000 (???  we drop this)
     %
-    % (the same sequence continues for hours at least,
-    % getting slower and slower)
+    % the same sequence continues for hours at least, getting slower and
+    % slower.  this problem would be masked if we have segment queueing.
     {false, State}.
 
 segment_arrival({#tcp{ack = 0, syn = 1} = Tcp, Data}, State)
