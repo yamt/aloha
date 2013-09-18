@@ -28,6 +28,7 @@
 -export([start_link/0]).
 -export([send_packet/3]).
 -export([notify/2]).
+-export([clear/0]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
@@ -74,6 +75,10 @@ handle_cast({resolved, Key, Value},
     Addrs2 = dict:store(Key, Value, Addrs),
     {[], Used2} = process_requests(Key, fetch_list(Key, Q), Addrs2, Used),
     State2 = State#state{addrs = Addrs2, used = Used2, q = dict:erase(Key, Q)},
+    {noreply, State2};
+handle_cast(clear, State) ->
+    ets:delete_all_objects(?MODULE),
+    State2 = State#state{addrs = dict:new(), used = dict:new()},
     {noreply, State2}.
 
 handle_info({timeout, Tref, cache_expire},
@@ -165,3 +170,6 @@ send_discover([#ether{src = L1Src}, L2|_], Backend) ->
     Pkt = Mod:discovery_packet(Dst, Src, L1Src),
     lager:debug("discovery pkt ~p", [aloha_utils:pr(Pkt, ?MODULE)]),
     aloha_nic:send_packet(Pkt, Backend).
+
+clear() ->
+    gen_server:cast(?MODULE, clear).
