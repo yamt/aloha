@@ -200,12 +200,6 @@ handle_call({set_suppress, Mode}, _From,
     State3 = deliver_to_app(State2),
     State4 = tcp_output(State3),
     reply({ok, OldMode}, State4);
-handle_call({test_and_set_active, OldMode, NewMode}, _From,
-            #tcp_state{active = OldMode} = State) ->
-    State2 = State#tcp_state{active = NewMode},
-    State3 = deliver_to_app(State2),
-    State4 = tcp_output(State3),
-    reply(ok, State4);
 handle_call(get_owner_info, _From,
             #tcp_state{owner = Owner, active = Active} = State) ->
     reply({Owner, Active}, State).
