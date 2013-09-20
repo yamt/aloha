@@ -40,3 +40,5 @@ TODO
 - make aloha_nic a separate app
 - send_timeout
 - workaround ct_run failure on travis-ci
+- ctlinput
+- pmtu discovery
