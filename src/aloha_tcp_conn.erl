@@ -503,11 +503,11 @@ update_receiver(#tcp{seqno = Seqno} = Tcp, Data,
     %    Ours <- Linux   seq 4000:5000 (we drop this)
     %
     %    Ours <- Linux   seq 3000:4000 (retransmit)
-    %    Ours -> Linux   ack 4000
+    %    Ours -> Linux   ack 4000      (window update)
     %    Ours <- Linux   seq 6000:7000 (???  we drop this)
     %
     %    Ours <- Linux   seq 4000:5000 (retransmit)
-    %    Ours -> Linux   ack 5000
+    %    Ours -> Linux   ack 5000      (window update)
     %    Ours <- Linux   seq 7000:8000 (???  we drop this)
     %
     % the same sequence continues for hours at least, getting slower and
