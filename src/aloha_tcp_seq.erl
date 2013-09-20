@@ -101,6 +101,7 @@ trim(Syn, Data, Fin, Seq, WinStart) ->
 % NetBSD accepts it.
 % Linux seems to accept it too.  (tcp_validate_incoming@tcp_input.c)
 %
+% http://tools.ietf.org/html/draft-gont-tcpm-tcp-seq-validation-01
 % http://www.ietf.org/proceedings/86/slides/slides-86-tcpm-4
 accept_check(_, 1, undefined, _) ->  % special case: accept syn
     true;
