@@ -51,6 +51,9 @@
     snd_mss :: non_neg_integer(),
     snd_syn = 0 :: flag(),
     snd_fin = 0 :: flag(),
+    snd_rttseq :: tcp_seq(),
+    snd_rtttime,
+    snd_rttest = aloha_tcp_rtt:init(),
     rexmit_timer :: reference(),
     delack_timer :: reference(),
     rcv_nxt :: tcp_seq(),
@@ -304,7 +307,8 @@ process_ack(#tcp{ack = 1, ackno = Ack, window = Wnd},
     State3 = State2#tcp_state{snd_una = Ack, snd_nxt = seq_max(Nxt, Ack),
                               snd_syn = Syn2, snd_buf = SndBuf2,
                               snd_fin = Fin2, snd_wnd = Wnd},
-    process_writers(State3);
+    State4 = might_update_rtt(State3),
+    process_writers(State4);
 process_ack(#tcp{ack = 0}, State) ->
     State;  % rst, (retransmitted) syn
 process_ack(#tcp{ackno = Ack, window = Wnd} = Tcp,
@@ -314,6 +318,20 @@ process_ack(#tcp{ackno = Ack, window = Wnd} = Tcp,
 process_ack(Tcp, State) ->
     lager:info("TCP ~p out of range ack ~p ~p", [self(), pp(Tcp), pp(State)]),
     State.
+
+might_update_rtt(#tcp_state{snd_rtttime = undefined} = State) ->
+    State;
+might_update_rtt(#tcp_state{snd_rtttime = Time, snd_rttseq = Seq,
+                            snd_rttest = Est, snd_nxt = Nxt} = State)
+                 when ?SEQ_LT(Seq, Nxt) ->
+    Now = tcp_now(),
+    State#tcp_state{snd_rttest = aloha_tcp_rtt:sample(Now - Time, Est)};
+might_update_rtt(State) ->
+    State.
+
+tcp_now() ->
+    {MegaSec, Sec, MicroSec} = os:timestamp(),
+    (MegaSec * 1000000 + Sec) * 1000000 + MicroSec.
 
 update_mss(#tcp{syn = 0}, State) ->
     State;
@@ -597,6 +615,7 @@ tcp_output(CanProbe,
            AckNow,
            #tcp_state{snd_una = SndUna,
                       snd_nxt = SndNxt,
+                      snd_max = SndMax,
                       snd_wnd = SndWnd,
                       snd_mss = SMSS} = State) ->
     {Syn, Data, Fin} = to_send(State),
@@ -625,18 +644,37 @@ tcp_output(CanProbe,
                 orelse UpdateWin of
         true ->
             State2 = cancel_delack(State),
-            State3 = build_and_send_packet(Syn2, Data2, Fin2, Win, State2),
+            {SndNxt2, State3} =
+                build_and_send_packet(Syn2, Data2, Fin2, Win, State2),
+            % advance snd_max.
+            State5 = case ?SEQ_LT(SndMax, SndNxt2) of
+                true ->
+                    State4 = might_start_rtt_sampling(NeedProbe, SndNxt2,
+                                                      State3),
+                    State4#tcp_state{snd_max = SndNxt2};
+                _ ->
+                    State3  % do not sample retransmit for rtt estimate.
+            end,
             % do not advance snd_nxt for zwp.  otherwise our ack and window
             % updates will be out of the peer's window.
-            State4 = case NeedProbe of
-                true -> State3#tcp_state{snd_nxt = SndNxt};
-                _ -> State3
-            end,
-            State5 = might_renew_timer(SndNxt =:= SndUna, NeedProbe, State4),
-            tcp_output(State5);  % burst transmit
+            State6 = might_update_snd_nxt(NeedProbe, SndNxt2, State5),
+            State7 = might_renew_timer(SndNxt =:= SndUna, NeedProbe, State6),
+            tcp_output(State7);  % burst transmit
         false ->
             might_renew_timer(false, NeedProbe, State)
     end.
+
+might_start_rtt_sampling(true, _Nxt, State) ->
+    State;
+might_start_rtt_sampling(_, Nxt, #tcp_state{snd_rtttime = undefined} = State) ->
+    State#tcp_state{snd_rtttime = tcp_now(), snd_rttseq = Nxt};
+might_start_rtt_sampling(_, _Nxt, State) ->
+    State.
+
+might_update_snd_nxt(true, _, State) ->
+    State;
+might_update_snd_nxt(_, Nxt, State) ->
+    State#tcp_state{snd_nxt = Nxt}.
 
 cancel_timer(undefined) ->
     ok;
@@ -652,16 +690,16 @@ renew_timer(Timeout, Msg, State) ->
 might_renew_timer(false, false, State) ->
     State;
 might_renew_timer(true, NeedProbe, State) ->
-    {Timeout, Msg} = choose_timer(NeedProbe, State#tcp_state.state),
+    {Timeout, Msg} = choose_timer(NeedProbe, State),
     renew_timer(Timeout, Msg, State).
 
-choose_timer(_, time_wait) ->
+choose_timer(_, #tcp_state{state = time_wait}) ->
     % we have sent ack of fin.
     {?TIME_WAIT_TIMEOUT, time_wait_timer};
 choose_timer(true, _) ->
     {?PERSIST_TIMEOUT, persist_timer};
-choose_timer(false, _) ->
-    {?REXMIT_TIMEOUT, rexmit_timer}.
+choose_timer(false, #tcp_state{snd_rttest = Est}) ->
+    {aloha_tcp_rtt:rto(Est) div 1000, rexmit_timer}.
 
 push(_, _, 1, _) -> 1;
 push(1, _, _, _) -> 1;
@@ -671,7 +709,6 @@ push(_, _, _, _) -> 0.
 
 build_and_send_packet(Syn, Data, Fin, Win,
                       #tcp_state{snd_nxt = SndNxt,
-                                 snd_max = SndMax,
                                  rcv_nxt = RcvNxt,
                                  backend = Backend,
                                  rcv_mss = RMSS,
@@ -697,8 +734,7 @@ build_and_send_packet(Syn, Data, Fin, Win,
     aloha_tcp:send_packet(Pkt, NS, Backend),
     adv_win_check(Adv, State),
     SndNxt2 = calc_next_seq(Tcp, Data),
-    State#tcp_state{snd_nxt = SndNxt2, snd_max = seq_max(SndMax, SndNxt2),
-                    rcv_adv = Adv}.
+    {SndNxt2, State#tcp_state{rcv_adv = Adv}}.
 
 adv_win_check(_, #tcp_state{rcv_adv = undefined}) ->
     ok;

@@ -36,7 +36,6 @@ TODO
 - handle exiting processes in accept/read/write queues
 - wscale option
 - out of order segment queueing
-- rtt estimate
 - make aloha_nic a separate app
 - send_timeout
 - workaround ct_run failure on travis-ci
