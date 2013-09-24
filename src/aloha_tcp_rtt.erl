@@ -40,7 +40,8 @@
 -define(DEFAULT_RTO, 1000000).
 
 % RFC 6298 says 1 sec.
-% linux seems to use around 200ms.
+% netbsd uses 1 sec.  (2 slow-ticks)
+% linux seems to use 200ms by default.  (TCP_RTO_MIN)
 % http://www.ee.ucl.ac.uk/~uceeips/minrto.pdf
 % http://www.ee.ucl.ac.uk/~uceeips/minrto-networking07-psaras.pdf
 % http://www.ietf.org/mail-archive/web/tcpm/current/msg07039.html
