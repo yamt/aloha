@@ -103,7 +103,6 @@ init(Opts) ->
                        snd_buf_size = proplists:get_value(snd_buf, Opts, 3000),
                        snd_mss = MSS,
                        snd_wnd = 1,  % for initial syn
-                       rexmit_timer = make_ref(),
                        rcv_buf = <<>>,
                        rcv_buf_size = proplists:get_value(rcv_buf, Opts, 3000),
                        rcv_mss = MSS,
@@ -230,19 +229,21 @@ handle_info({timeout, TRef, reader_timeout},
 handle_info({timeout, TRef, time_wait_timer},
             #tcp_state{rexmit_timer = TRef, state = time_wait} = State) ->
     lager:debug("2msl timer expired"),
-    State2 = set_state(closed, State),
-    noreply(State2);
+    State2 = State#tcp_state{rexmit_timer = undefined},
+    State3 = set_state(closed, State2),
+    noreply(State3);
 handle_info({timeout, TRef, Name},
             #tcp_state{snd_una = Una, rexmit_timer = TRef} = State) ->
     lager:debug("~p expired", [Name]),
-    State2 = State#tcp_state{snd_nxt = Una},
+    State2 = State#tcp_state{snd_nxt = Una, rexmit_timer = undefined},
     State3 = tcp_output(true, false, State2),
     noreply(State3);
 handle_info({timeout, TRef, delack_timeout},
             #tcp_state{delack_timer = TRef} = State) ->
     lager:info("delack timer expired"),
-    State2 = tcp_output(true, State),
-    noreply(State2);
+    State2 = State#tcp_state{delack_timer = undefined},
+    State3 = tcp_output(true, State2),
+    noreply(State3);
 handle_info({'EXIT', Pid, Reason}, #tcp_state{owner = Pid} = State) ->
     lager:info("owner ~p exited with reason ~p", [Pid, Reason]),
     noreply(close(State));
@@ -379,17 +380,19 @@ update_state_on_flags(_, State) ->
 set_close_reason(Reason, State) ->
     State#tcp_state{close_reason = Reason}.
 
-reset(#tcp_state{owner = Owner} = State) ->
-    lager:info("TCP ~p reset owner ~p", [self(), Owner]),
-    send_to_owner({tcp_error, self_socket(), econnreset}, State),
+reset(State) ->
+    reset(econnreset, State).
+
+reset(Reason, #tcp_state{owner = Owner} = State) ->
+    lager:info("TCP ~p reset owner ~p reason ~p", [self(), Owner, Reason]),
+    send_to_owner({tcp_error, self_socket(), Reason}, State),
     State2 = set_state(closed, State),
-    State3 = set_close_reason(econnreset, State2),
+    State3 = set_close_reason(Reason, State2),
     process_users(State3).
 
 send_to_owner(_Msg, #tcp_state{owner = none}) ->
     ok;
 send_to_owner(Msg, #tcp_state{owner = Owner}) ->
-    % XXXshould queue?
     Owner ! Msg.  % XXXshould queue?
 
 % "check sequence number"
@@ -635,9 +638,14 @@ tcp_output(CanProbe,
             might_renew_timer(false, NeedProbe, State)
     end.
 
+cancel_timer(undefined) ->
+    ok;
+cancel_timer(Tref) ->
+    erlang:cancel_timer(Tref).
+
 renew_timer(Timeout, Msg, State) ->
     lager:debug("renew timer ~p", [Msg]),
-    erlang:cancel_timer(State#tcp_state.rexmit_timer),
+    cancel_timer(State#tcp_state.rexmit_timer),
     TRef = erlang:start_timer(Timeout, self(), Msg),
     State#tcp_state{rexmit_timer = TRef}.
 
