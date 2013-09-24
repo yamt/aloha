@@ -429,10 +429,15 @@ process_input(#tcp{} = Tcp, Data, State) ->
             update_receiver(Tcp2, Data2, State2);
         false ->
             case {State#tcp_state.owner, seg_len(Tcp, Data)} of
-                {none, Len} when Len =/= 0 ->
-                    % this can be a window probe sent to a closed socket. 
-                    % note that the peer doesn't have a way to distinguish
-                    % half-close and full-close on our side.
+                {none, Len} when Len =/= 0 andalso
+                            ?SEQ_LTE(State#tcp_state.rcv_nxt, Tcp#tcp.seqno) ->
+                    % new data beyond our window received on a closed socket.
+                    % this might be a window probe.  because the peer doesn't
+                    % have a way to distinguish half-close and full-close on
+                    % our side, it can continue sending data even after we
+                    % closed the socket.  even if the peer wanted to close the
+                    % socket, he can't send us a fin without sending us data
+                    % in his send buffer first.
                     lager:info("TCP reset out of window segment "
                                "~p seg_len ~p state ~p",
                                [pp(Tcp), seg_len(Tcp, Data), pp(State)]),
