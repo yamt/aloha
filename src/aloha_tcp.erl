@@ -171,7 +171,7 @@ connect(NS, RAddr0, RPort, L1Src, Backend, Opts) ->
     end.
 
 connect_wait(Sock) ->
-    lager:info("~p waiting active connect completion", [self()]),
+    lager:info("waiting active connect completion", []),
     receive
         {aloha_tcp_connected, Sock} -> {ok, Sock};
         {tcp_error, Sock, econnreset} -> {error, econnrefused};

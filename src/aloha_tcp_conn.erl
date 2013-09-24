@@ -113,8 +113,7 @@ init(Opts) ->
                        owner = Owner,
                        key = Key,
                        namespace = NS},
-    lager:info("TCP ~p init for ~p ~p ~p",
-               [self(), sockname(Tmpl), peername(Tmpl), Key]),
+    lager:info("TCP init for ~p ~p ~p", [sockname(Tmpl), peername(Tmpl), Key]),
     true = ets:insert_new(?MODULE, {Key, self()}),
     link(Owner),
     {ok, State}.
@@ -141,13 +140,13 @@ noreply(false, false, State) ->
 
 handle_call(connect, {Pid, _},
             #tcp_state{owner = Pid, state = closed} = State) ->
-    lager:info("TCP ~p active connect owner ~p", [self(), Pid]),
+    lager:info("TCP active connect owner ~p", [Pid]),
     State2 = State#tcp_state{snd_syn = 1},
     State3 = set_state(syn_sent, State2),
     State4 = tcp_output(State3),
     reply(ok, State4);
 handle_call({send, Data}, From, State) ->
-    lager:info("TCP ~p user write datalen ~p", [self(), byte_size(Data)]),
+    lager:info("TCP user write datalen ~p", [byte_size(Data)]),
     State2 = add_writer({From, Data}, State),
     State3 = process_writers(State2),
     State4 = tcp_output(State3),
@@ -163,7 +162,7 @@ handle_call({recv, _, _}, _From,
     reply({error, ealready}, State);
 handle_call({recv, Len, Timeout}, From,
             #tcp_state{reader = none, active = false} = State) ->
-    lager:info("TCP ~p user read request datalen ~p", [self(), Len]),
+    lager:info("TCP user read request datalen ~p", [Len]),
     TRef = setup_reader_timeout(Timeout),
     State2 = State#tcp_state{reader = {TRef, From, Len, <<>>}},
     State3 = process_readers(State2),
@@ -184,10 +183,10 @@ handle_call({controlling_process, NewOwner}, {OldOwner, _},
     link(NewOwner),
     reply(ok, State2);
 handle_call(close, {Pid, _}, #tcp_state{owner = Owner} = State) ->
-    lager:info("TCP ~p user close from ~p owner ~p", [self(), Pid, Owner]),
+    lager:info("TCP user close from ~p owner ~p", [Pid, Owner]),
     reply(ok, close(State));
 handle_call(force_close, {Pid, _}, #tcp_state{owner = Owner} = State) ->
-    lager:info("TCP ~p force close from ~p owner ~p", [self(), Pid, Owner]),
+    lager:info("TCP force close from ~p owner ~p", [Pid, Owner]),
     State2 = close(State),
     State3 = set_state(closed, State2),
     reply(ok, State3);
@@ -209,11 +208,11 @@ handle_call(get_owner_info, _From,
 handle_cast({#tcp{}, _} = Msg, State) ->
     segment_arrival(Msg, State);
 handle_cast({shutdown, read}, State) ->
-    lager:info("TCP ~p user shutdown read", [self()]),
+    lager:info("TCP user shutdown read", []),
     State2 = shutdown_receiver(State),
     noreply(State2);
 handle_cast({shutdown, write}, State) ->
-    lager:info("TCP ~p user shutdown write", [self()]),
+    lager:info("TCP user shutdown write", []),
     State2 = shutdown_sender(State),
     noreply(State2);
 handle_cast(M, State) ->
@@ -255,7 +254,7 @@ handle_info(Info, State) ->
     noreply(State).
 
 terminate(Reason, #tcp_state{key = Key}) ->
-    lager:info("TCP ~p conn process terminate ~p", [self(), Reason]),
+    lager:info("TCP conn process terminate ~p", [Reason]),
     true = ets:delete(?MODULE, Key),
     ok.
 
@@ -301,7 +300,7 @@ process_ack(#tcp{ack = 1, ackno = Ack, window = Wnd},
                        snd_syn = Syn, snd_buf = SndBuf,
                        snd_fin = Fin} = State) when
             ?SEQ_LTE(Una, Ack) andalso ?SEQ_LTE(Ack, Max) ->
-    lager:info("TCP ~p ACKed ~p-~p", [self(), Una, Ack]),
+    lager:info("TCP ACKed ~p-~p", [Una, Ack]),
     {Syn2, SndBuf2, Fin2, Ack} = aloha_tcp_seq:trim(Syn, SndBuf, Fin, Una, Ack),
     State2 = update_state_on_ack(Syn2 =/= Syn, Fin2 =/= Fin, State),
     State3 = State2#tcp_state{snd_una = Ack, snd_nxt = seq_max(Nxt, Ack),
@@ -316,7 +315,7 @@ process_ack(#tcp{ackno = Ack, window = Wnd} = Tcp,
     lager:debug("dup ack ~p ~p", [pp(Tcp), pp(State)]),
     State;
 process_ack(Tcp, State) ->
-    lager:info("TCP ~p out of range ack ~p ~p", [self(), pp(Tcp), pp(State)]),
+    lager:info("TCP out of range ack ~p ~p", [pp(Tcp), pp(State)]),
     State.
 
 might_update_rtt(#tcp_state{snd_rtttime = undefined} = State) ->
@@ -344,13 +343,13 @@ update_sender(Tcp, State) ->
     update_mss(Tcp, State2).
 
 established(#tcp_state{owner = Owner} = State) ->
-    lager:info("TCP ~p connected owner ~p", [self(), Owner]),
+    lager:info("TCP connected owner ~p", [Owner]),
     % notify the listener socket process or connecting process
     Owner ! {aloha_tcp_connected, self_socket()},
     set_state(established, State).
 
 set_state(New, State) ->
-    lager:info("TCP ~p State ~p -> ~p", [self(), State#tcp_state.state, New]),
+    lager:info("TCP State ~p -> ~p", [State#tcp_state.state, New]),
     State#tcp_state{state = New}.
 
 % incoming ack
@@ -402,7 +401,7 @@ reset(State) ->
     reset(econnreset, State).
 
 reset(Reason, #tcp_state{owner = Owner} = State) ->
-    lager:info("TCP ~p reset owner ~p reason ~p", [self(), Owner, Reason]),
+    lager:info("TCP reset owner ~p reason ~p", [Owner, Reason]),
     send_to_owner({tcp_error, self_socket(), Reason}, State),
     State2 = set_state(closed, State),
     State3 = set_close_reason(Reason, State2),
@@ -447,17 +446,15 @@ process_input(#tcp{} = Tcp, Data, State) ->
                     % this can be a window probe sent to a closed socket. 
                     % note that the peer doesn't have a way to distinguish
                     % half-close and full-close on our side.
-                    lager:info("TCP ~p reset out of window segment "
+                    lager:info("TCP reset out of window segment "
                                "~p seg_len ~p state ~p",
-                               [self(), pp(Tcp), seg_len(Tcp, Data),
-                                pp(State)]),
+                               [pp(Tcp), seg_len(Tcp, Data), pp(State)]),
                     send_rst(State),
                     {false, reset(State)};
                 _ ->
-                    lager:info("TCP ~p drop out of window segment "
+                    lager:info("TCP drop out of window segment "
                                "~p seg_len ~p state ~p",
-                               [self(), pp(Tcp), seg_len(Tcp, Data),
-                                pp(State)]),
+                               [pp(Tcp), seg_len(Tcp, Data), pp(State)]),
                     % XXX retransmitted syn also comes here and we
                     % end up sending ack without syn.  probably
                     % we should not advance snd_nxt when sending
@@ -490,8 +487,8 @@ update_receiver(#tcp{seqno = Seq} = Tcp, Data,
                 #tcp_state{rcv_nxt = Seq, owner = none} = State)
                 when Data =/= <<>> ->
     % RFC 1122 4.2.2.13 "send a RST to show that data was lost"
-    lager:info("TCP ~p sending rst for ~p datalen ~p state ~p",
-               [self(), pp(Tcp), byte_size(Data), pp(State)]),
+    lager:info("TCP sending rst for ~p datalen ~p state ~p",
+               [pp(Tcp), byte_size(Data), pp(State)]),
     send_rst(State),
     {false, reset(State)};
 update_receiver(#tcp{seqno = Seq, fin = Fin} = Tcp, Data,
@@ -506,8 +503,8 @@ update_receiver(#tcp{seqno = Seq, fin = Fin} = Tcp, Data,
 update_receiver(#tcp{seqno = Seqno} = Tcp, Data,
                 #tcp_state{rcv_nxt = Nxt} = State) ->
     % drop out of order segment
-    lager:info("TCP ~p drop out of order segment rcv_nxt ~p seqno ~p seglen ~p",
-        [self(), Nxt, Seqno, seg_len(Tcp, Data)]),
+    lager:info("TCP drop out of order segment rcv_nxt ~p seqno ~p seglen ~p",
+               [Nxt, Seqno, seg_len(Tcp, Data)]),
     % do not send an ack as we never queue out of order
     % segments.  sending ack here causes peer's fast
     % retransmission, which somehow relies on our queueing.
@@ -546,8 +543,7 @@ segment_arrival({#tcp{ack = Ack, rst = Rst, syn = Syn} = Tcp, Data}, State) when
     State5 = tcp_output(AckNow, State4),
     noreply(State5);
 segment_arrival({#tcp{} = Tcp, Data}, State) ->
-    lager:info("TCP ~p unimplemented datalen ~p~n~p",
-               [self(), byte_size(Data), pp(Tcp)]),
+    lager:info("TCP unimplemented datalen ~p~n~p", [byte_size(Data), pp(Tcp)]),
     noreply(State).
 
 next_state_on_close(established) -> fin_wait_1;
@@ -581,7 +577,7 @@ choose_rcv_wnd(#tcp_state{rcv_nxt = Nxt, rcv_adv = Adv} = State) ->
             ?SEQ(Adv - Nxt);
         false ->
             % we failed to advertise window update but accepted segments
-            lager:info("TCP ~p rcv_adv ~p < rcv_nxt ~p", [self(), Adv, Nxt]),
+            lager:info("TCP rcv_adv ~p < rcv_nxt ~p", [Adv, Nxt]),
             0
     end,
     choose_rcv_wnd(min(rcv_buf_space(State), 65535), AdvWnd, State).
@@ -592,7 +588,7 @@ choose_rcv_wnd(NextWnd, AdvWnd,
                #tcp_state{rcv_buf_size = BufSize, rcv_mss = MSS})
         when NextWnd - AdvWnd >= BufSize div 2 orelse
              NextWnd - AdvWnd >= MSS ->
-    lager:info("TCP ~p window update ~p -> ~p", [self(), AdvWnd, NextWnd]),
+    lager:info("TCP window update ~p -> ~p", [AdvWnd, NextWnd]),
     {true, NextWnd};
 choose_rcv_wnd(_, AdvWnd, _) ->
     {false, AdvWnd}.
@@ -825,7 +821,7 @@ controlling_process({aloha_socket, Pid} = Sock, OldOwner, NewOwner)
     {ok, true} = gen_server:call(Pid, {set_suppress, false}),
     ok;
 controlling_process(Sock, OldOwner, NewOwner) ->
-    lager:info("not_owner ~p ~p ~p ~p", [self(), Sock, OldOwner, NewOwner]),
+    lager:info("not_owner ~p ~p ~p", [Sock, OldOwner, NewOwner]),
     {error, not_owner}.
 
 % transfer already received messages from the old controlling process
@@ -933,7 +929,7 @@ process_readers(#tcp_state{rcv_buf = <<>>,
        TcpState =:= closed ->
     case Data of
         <<>> ->
-            lager:info("TCP ~p user read result closed", [self()]),
+            lager:info("TCP user read result closed", []),
             lager:debug("closed ~p", [pp(State)]),
             gen_server:reply(From, {error, Reason});
         Partial ->
@@ -963,7 +959,7 @@ process_readers(#tcp_state{reader = {TRef, From, Len, Data},
     process_readers(State3).
 
 reply_data(TRef, From, Data) ->
-    lager:info("TCP ~p user read result datalen ~p", [self(), byte_size(Data)]),
+    lager:info("TCP user read result datalen ~p", [byte_size(Data)]),
     cancel_reader_timeout(TRef),
     gen_server:reply(From, {ok, Data}).
 
