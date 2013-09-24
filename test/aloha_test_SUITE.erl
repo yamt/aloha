@@ -91,6 +91,13 @@ groups() ->
      {ipv6, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests}].
 
 init_per_suite(Config) ->
+    application:load(lager),
+    application:set_env(lager, handlers,
+        [{lager_console_backend, [
+            info, 
+            {lager_default_formatter,
+             [date, " ", time, " [", severity, "] ", pid, " ", message, "\n"]}
+        ]}]),
     lager:start(),
     lager:set_loglevel(lager_file_backend, "console.log", warning),
     application:start(sasl),
