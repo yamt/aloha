@@ -26,12 +26,12 @@ to run cowboy/ranch on aloha.
 TODO
 ----
 
-- connect timeout
+- user timeout
+- rto backoff
 - exit_on_close
 - urg
 - sender sws avoidance
 - ip fragment
-- timeout
 - use gproc instead of raw ets tables?
 - handle exiting processes in accept/read/write queues
 - wscale option
