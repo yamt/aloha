@@ -237,9 +237,10 @@ handle_info({timeout, TRef, time_wait_timer},
 handle_info({timeout, TRef, Name},
             #tcp_state{snd_una = Una, rexmit_timer = TRef} = State) ->
     lager:debug("~p expired", [Name]),
-    State2 = State#tcp_state{snd_nxt = Una, rexmit_timer = undefined},
-    State3 = tcp_output(true, false, State2),
-    noreply(State3);
+    State2 = might_cancel_rtt_sampling(State),
+    State3 = State2#tcp_state{snd_nxt = Una, rexmit_timer = undefined},
+    State4 = tcp_output(true, false, State3),
+    noreply(State4);
 handle_info({timeout, TRef, delack_timeout},
             #tcp_state{delack_timer = TRef} = State) ->
     lager:info("delack timer expired"),
@@ -317,20 +318,6 @@ process_ack(#tcp{ackno = Ack, window = Wnd} = Tcp,
 process_ack(Tcp, State) ->
     lager:info("TCP out of range ack ~p ~p", [pp(Tcp), pp(State)]),
     State.
-
-might_update_rtt(#tcp_state{snd_rtttime = undefined} = State) ->
-    State;
-might_update_rtt(#tcp_state{snd_rtttime = Time, snd_rttseq = Seq,
-                            snd_rttest = Est, snd_nxt = Nxt} = State)
-                 when ?SEQ_LT(Seq, Nxt) ->
-    Now = tcp_now(),
-    State#tcp_state{snd_rttest = aloha_tcp_rtt:sample(Now - Time, Est)};
-might_update_rtt(State) ->
-    State.
-
-tcp_now() ->
-    {MegaSec, Sec, MicroSec} = os:timestamp(),
-    (MegaSec * 1000000 + Sec) * 1000000 + MicroSec.
 
 update_mss(#tcp{syn = 0}, State) ->
     State;
@@ -660,13 +647,6 @@ tcp_output(CanProbe,
             might_renew_timer(false, NeedProbe, State)
     end.
 
-might_start_rtt_sampling(true, _Nxt, State) ->
-    State;
-might_start_rtt_sampling(_, Nxt, #tcp_state{snd_rtttime = undefined} = State) ->
-    State#tcp_state{snd_rtttime = tcp_now(), snd_rttseq = Nxt};
-might_start_rtt_sampling(_, _Nxt, State) ->
-    State.
-
 might_update_snd_nxt(true, _, State) ->
     State;
 might_update_snd_nxt(_, Nxt, State) ->
@@ -771,6 +751,35 @@ should_hibernate(#tcp_state{state = time_wait}) ->
     true;
 should_hibernate(_) ->
     false.
+
+%% rtt sampling
+
+might_start_rtt_sampling(true, _Nxt, State) ->
+    State;
+might_start_rtt_sampling(_, Nxt, #tcp_state{snd_rtttime = undefined} = State) ->
+    State#tcp_state{snd_rtttime = tcp_now(), snd_rttseq = Nxt};
+might_start_rtt_sampling(_, _Nxt, State) ->
+    State.
+
+might_update_rtt(#tcp_state{snd_rtttime = undefined} = State) ->
+    State;
+might_update_rtt(#tcp_state{snd_rtttime = Time, snd_rttseq = Seq,
+                            snd_rttest = Est, snd_nxt = Nxt} = State)
+                 when ?SEQ_LT(Seq, Nxt) ->
+    Now = tcp_now(),
+    State#tcp_state{snd_rttest = aloha_tcp_rtt:sample(Now - Time, Est),
+                    snd_rtttime = undefined};
+might_update_rtt(State) ->
+    State.
+
+might_cancel_rtt_sampling(#tcp_state{snd_rtttime = undefined} = State) ->
+    State;
+might_cancel_rtt_sampling(#tcp_state{} = State) ->
+    State#tcp_state{snd_rtttime = undefined}.
+
+tcp_now() ->
+    {MegaSec, Sec, MicroSec} = os:timestamp(),
+    (MegaSec * 1000000 + Sec) * 1000000 + MicroSec.
 
 %%%%%%%%%%%%%%%%%%%% user interface %%%%%%%%%%%%%%%%%%%%
 
