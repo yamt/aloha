@@ -211,7 +211,7 @@ tcp_recv_timeout(Config) ->
     ok = aloha_socket:send(Sock, Msg),
     Timeout = 200,
     Timeout2 = Timeout + case ?config(loopback_mod, Config) of
-        aloha_nic_lossyloopback -> 2000;
+        aloha_nic_lossyloopback -> 4000;  % chosen to deal with two loss
         _ -> 0
     end,
     {ok, Msg} = case recv(Sock, MsgSize * 2, Timeout2, Config) of
