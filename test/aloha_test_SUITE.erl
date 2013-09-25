@@ -294,7 +294,7 @@ recv(Sock, MsgSize, Timeout, Config) ->
 
 async_recv(Sock, MsgSize, Timeout) ->
     %aloha_socket:setopts(Sock, [{active, true}]),
-    ct:pal("async_recv on ~p for ~p bytes", [Sock, MsgSize]),
+    %ct:pal("async_recv on ~p for ~p bytes", [Sock, MsgSize]),
     async_recv(Sock, MsgSize, Timeout, true, <<>>).
 
 async_recv(_Sock, Left, _Timeout, false, Acc) when Left =< 0 ->
@@ -303,7 +303,7 @@ async_recv(Sock, MsgSize, Timeout, _, Acc) ->
     receive
         {tcp, Sock, Data} ->
             Left = MsgSize - byte_size(Data),
-            ct:pal("~p bytes received (~p bytes left)",
+            %ct:pal("~p bytes received (~p bytes left)",
                    [byte_size(Data), Left]),
             % XXX reduce Timeout
             async_recv(Sock, Left, Timeout, false, <<Acc/bytes, Data/bytes>>);
@@ -313,7 +313,7 @@ async_recv(Sock, MsgSize, Timeout, _, Acc) ->
                 _ -> {ok, Acc}
             end;
         Other ->
-            ct:pal("got a unexpected msg ~p", [Other]),
+            %ct:pal("got a unexpected msg ~p", [Other]),
             {error, {unknown_msg, Other}}
         after Timeout ->
             case Acc of
@@ -407,7 +407,6 @@ echo_loop(Sock, Config) ->
         {error, closed} ->
             ok = aloha_socket:close(Sock);
         {error, Reason} ->
-            ct:pal("echo_loop got error ~p", [Reason]),
             ok = aloha_socket:close(Sock)
     end.
 
@@ -418,7 +417,7 @@ discard_loop(Sock, Config) ->
         {error, closed} ->
             ok = aloha_socket:close(Sock);
         {error, Reason} ->
-            ct:pal("discard_loop got error ~p", [Reason]),
+            %ct:pal("discard_loop got error ~p", [Reason]),
             ok = aloha_socket:close(Sock)
     end.
 
