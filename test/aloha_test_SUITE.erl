@@ -304,7 +304,7 @@ async_recv(Sock, MsgSize, Timeout, _, Acc) ->
         {tcp, Sock, Data} ->
             Left = MsgSize - byte_size(Data),
             %ct:pal("~p bytes received (~p bytes left)",
-                   [byte_size(Data), Left]),
+            %       [byte_size(Data), Left]),
             % XXX reduce Timeout
             async_recv(Sock, Left, Timeout, false, <<Acc/bytes, Data/bytes>>);
         {tcp_closed, Sock} ->
