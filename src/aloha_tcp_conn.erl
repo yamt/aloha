@@ -772,7 +772,7 @@ might_update_rtt(#tcp_state{snd_rtttime = undefined} = State) ->
     State;
 might_update_rtt(#tcp_state{snd_rtttime = Time, snd_rttseq = Seq,
                             snd_rttest = Est, snd_nxt = Nxt} = State)
-                 when ?SEQ_LT(Seq, Nxt) ->
+                 when ?SEQ_LTE(Seq, Nxt) ->
     Now = tcp_now(),
     lager:info("update RTT at seq ~p time ~p nxt ~p now ~p",
                [Seq, Time, Nxt, Now]),
