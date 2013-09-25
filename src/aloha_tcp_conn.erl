@@ -762,7 +762,9 @@ should_hibernate(_) ->
 might_start_rtt_sampling(true, _Nxt, State) ->
     State;
 might_start_rtt_sampling(_, Nxt, #tcp_state{snd_rtttime = undefined} = State) ->
-    State#tcp_state{snd_rtttime = tcp_now(), snd_rttseq = Nxt};
+    Now = tcp_now(),
+    lager:info("start RTT sampling at seq ~p now ~p", [Nxt, Now]),
+    State#tcp_state{snd_rtttime = Now, snd_rttseq = Nxt};
 might_start_rtt_sampling(_, _Nxt, State) ->
     State.
 
@@ -772,6 +774,8 @@ might_update_rtt(#tcp_state{snd_rtttime = Time, snd_rttseq = Seq,
                             snd_rttest = Est, snd_nxt = Nxt} = State)
                  when ?SEQ_LT(Seq, Nxt) ->
     Now = tcp_now(),
+    lager:info("update RTT at seq ~p time ~p nxt ~p now ~p",
+               [Seq, Time, Nxt, Now]),
     State#tcp_state{snd_rttest = aloha_tcp_rtt:sample(Now - Time, Est),
                     snd_rtttime = undefined};
 might_update_rtt(State) ->
@@ -779,7 +783,9 @@ might_update_rtt(State) ->
 
 might_cancel_rtt_sampling(#tcp_state{snd_rtttime = undefined} = State) ->
     State;
-might_cancel_rtt_sampling(#tcp_state{} = State) ->
+might_cancel_rtt_sampling(#tcp_state{snd_rtttime = Time,
+                                     snd_rttseq = Seq} = State) ->
+    lager:info("update RTT at seq ~p time ~p", [Seq, Time]),
     State#tcp_state{snd_rtttime = undefined}.
 
 tcp_now() ->

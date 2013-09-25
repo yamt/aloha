@@ -270,7 +270,7 @@ tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, MsgSize,
     {ok, PeerName} = aloha_socket:peername(Sock),
     SockName = {aloha_addr:to_ip(LocalIPAddr), LocalPort},
     {ok, SockName} = aloha_socket:sockname(Sock),
-    ct:pal("peername ~p sockname ~p", [PeerName, SockName]),
+    ct:pal("sock ~p peername ~p sockname ~p", [Sock, PeerName, SockName]),
     Sock.
 
 tcp_cleanup(Sock) ->
