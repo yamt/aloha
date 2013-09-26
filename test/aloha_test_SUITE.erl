@@ -406,7 +406,7 @@ echo_loop(Sock, Config) ->
             echo_loop(Sock, Config);
         {error, closed} ->
             ok = aloha_socket:close(Sock);
-        {error, Reason} ->
+        {error, _Reason} ->
             ok = aloha_socket:close(Sock)
     end.
 
@@ -416,7 +416,7 @@ discard_loop(Sock, Config) ->
             discard_loop(Sock, Config);
         {error, closed} ->
             ok = aloha_socket:close(Sock);
-        {error, Reason} ->
+        {error, _Reason} ->
             %ct:pal("discard_loop got error ~p", [Reason]),
             ok = aloha_socket:close(Sock)
     end.
