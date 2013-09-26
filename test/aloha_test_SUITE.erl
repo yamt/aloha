@@ -183,19 +183,18 @@ tcp_self_connect(Config) ->
 tcp_echo(Config) ->
     ct:pal("self ~p", [self()]),
     IP = ?config(ip, Config),
-    tcp_send_and_recv(IP, ?ECHO_PORT, IP, choose_local_port(Config), Config).
+    tcp_send_and_recv(IP, ?ECHO_PORT, IP, auto, Config).
 
 tcp_bulk_transfer(Config) ->
     ct:pal("self ~p", [self()]),
     IP = ?config(ip, Config),
-    tcp_send(IP, ?DISCARD_PORT, IP, choose_local_port(Config), Config).
+    tcp_send(IP, ?DISCARD_PORT, IP, auto, Config).
 
 tcp_unlisten(Config) ->
     ct:pal("self ~p", [self()]),
     IP = ?config(ip, Config),
     try
-        tcp_send_and_recv(IP, ?UNLISTEN_PORT, IP, choose_local_port(Config),
-                          Config)
+        tcp_send_and_recv(IP, ?UNLISTEN_PORT, IP, auto, Config)
     catch
         error:{badmatch, {error, econnrefused}} = E ->
             ct:pal("expected exception ~p", [E]),
@@ -208,8 +207,7 @@ tcp_recv_timeout(Config) ->
     IP = ?config(ip, Config),
     Msg = <<"hi!">>,
     MsgSize = byte_size(Msg),
-    Sock = tcp_prepare(IP, ?ECHO_PORT, IP, choose_local_port(Config), 3000,
-                       Config),
+    {ok, Sock} = tcp_prepare(IP, ?ECHO_PORT, IP, auto, 3000, Config),
     ok = aloha_socket:send(Sock, Msg),
     Timeout = 200,
     Timeout2 = Timeout + case ?config(loopback_mod, Config) of
@@ -232,8 +230,7 @@ tcp_close(Config) ->
     ct:pal("self ~p", [self()]),
     IP = ?config(ip, Config),
     try
-        tcp_send_and_recv(IP, ?CLOSE_PORT, IP, choose_local_port(Config),
-                          Config)
+        tcp_send_and_recv(IP, ?CLOSE_PORT, IP, auto, Config)
     catch
         error:{badmatch, {error, econnreset}} = E ->
             Trace = erlang:get_stacktrace(),
@@ -273,15 +270,33 @@ tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, MsgSize,
     Mtu = proplists:get_value(mtu, Opts),
     Backend = proplists:get_value(backend, Opts),
     ct:pal("connecting"),
-    {ok, Sock} = aloha_tcp:connect(NS, RemoteIPAddr, RemotePort, Addr, Backend,
-                                   [{ip, LocalIPAddr}, {port, LocalPort},
-                                    {mtu, Mtu}, {rcv_buf, MsgSize}|ActiveOpts]),
-    PeerName = {aloha_addr:to_ip(RemoteIPAddr), RemotePort},
-    {ok, PeerName} = aloha_socket:peername(Sock),
-    SockName = {aloha_addr:to_ip(LocalIPAddr), LocalPort},
-    {ok, SockName} = aloha_socket:sockname(Sock),
-    ct:pal("sock ~p peername ~p sockname ~p", [Sock, PeerName, SockName]),
-    Sock.
+    LocalPort2 = case LocalPort of
+        auto -> choose_local_port(Config);
+        Port -> Port
+    end,
+    case aloha_tcp:connect(NS, RemoteIPAddr, RemotePort, Addr, Backend,
+                           [{ip, LocalIPAddr}, {port, LocalPort2},
+                            {mtu, Mtu}, {rcv_buf, MsgSize}|ActiveOpts]) of
+        {ok, Sock} ->
+            PeerName = {aloha_addr:to_ip(RemoteIPAddr), RemotePort},
+            {ok, PeerName} = aloha_socket:peername(Sock),
+            SockName = {aloha_addr:to_ip(LocalIPAddr), LocalPort2},
+            {ok, SockName} = aloha_socket:sockname(Sock),
+            ct:pal("sock ~p peername ~p sockname ~p",
+                   [Sock, PeerName, SockName]),
+            {ok, Sock};
+        {error, eaddrinuse} = Error ->
+            case LocalPort of
+                auto ->
+                    % retry
+                    tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr,
+                        LocalPort, MsgSize, Config);
+                _ ->
+                    Error
+            end;
+        Error ->
+            Error
+    end.
 
 tcp_cleanup(Sock) ->
     ct:pal("cleaning up ..."),
@@ -335,8 +350,8 @@ async_recv(Sock, MsgSize, Timeout, _, Acc) ->
 tcp_send_and_recv(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
     Msg = make_data(),
     MsgSize = byte_size(Msg),
-    Sock = tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
-                       MsgSize, Config),
+    {ok, Sock} = tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
+                             MsgSize, Config),
     MsgSize = byte_size(Msg),
     ct:pal("send"),
     ok = aloha_socket:send(Sock, Msg),
@@ -353,8 +368,8 @@ tcp_send_and_recv(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
 tcp_send(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, Config) ->
     Msg = make_data(),
     MsgSize = byte_size(Msg),
-    Sock = tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
-                       MsgSize, Config),
+    {ok, Sock} = tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort,
+                             MsgSize, Config),
     MsgSize = byte_size(Msg),
     ct:pal("send"),
     ok = aloha_socket:send(Sock, Msg),
