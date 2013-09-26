@@ -37,6 +37,7 @@
 -export([tcp_unlisten/1]).
 -export([tcp_recv_timeout/1]).
 -export([tcp_close/1]).
+-export([tcp_eaddrinuse/1]).
 
 % server ports
 -define(ECHO_PORT, 7).
@@ -69,7 +70,8 @@ groups() ->
         tcp_bulk_transfer,
         tcp_unlisten,
         tcp_recv_timeout,
-        tcp_close
+        tcp_close,
+        tcp_eaddrinuse
     ],
     Protocols = [
         {group, ipv4},
@@ -248,6 +250,14 @@ tcp_close(Config) ->
             ok
     end.
     % XXX tcp_cleanup
+
+tcp_eaddrinuse(Config) ->
+    ct:pal("self ~p", [self()]),
+    IP = ?config(ip, Config),
+    Port = choose_local_port(Config),
+    {ok, Sock} = tcp_prepare(IP, Port, IP, Port, 100, Config),
+    {error, eaddrinuse} = tcp_prepare(IP, Port, IP, Port, 100, Config),
+    tcp_cleanup(Sock).
 
 make_data() ->
     iolist_to_binary(lists:map(fun(X) -> io_lib:format("~9..0w|", [X]) end,
