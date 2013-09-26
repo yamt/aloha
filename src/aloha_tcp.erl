@@ -157,14 +157,21 @@ connect(NS, RAddr0, RPort, L1Src, Backend, Opts) ->
                  make_template(Proto, RAddr, RPort, LAddr, LPort, L1Src)},
              {namespace, NS}],
     Opts3 = aloha_utils:acc_opts([rcv_buf, snd_buf], Opts, Opts2),
-    {ok, Pid} = aloha_tcp_conn:start(Opts3),
+    case aloha_tcp_conn:start(Opts3) of
+        {ok, Pid} ->
+            connect(Pid, Opts);
+        Error ->
+            Error
+    end.
+
+connect(Pid, Opts) ->
     ok = gen_server:call(Pid, connect),
     Sock = {aloha_socket, Pid},
     case connect_wait(Sock) of
         {ok, Sock} ->
             DefOpts = [{active, true}],
-            Opts4 = aloha_utils:acc_opts([active], Opts, DefOpts),
-            aloha_socket:setopts(Sock, Opts4),
+            Opts2 = aloha_utils:acc_opts([active], Opts, DefOpts),
+            aloha_socket:setopts(Sock, Opts2),
             {ok, Sock};
         Error ->
             Error

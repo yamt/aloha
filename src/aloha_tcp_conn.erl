@@ -114,9 +114,13 @@ init(Opts) ->
                        key = Key,
                        namespace = NS},
     lager:info("TCP init for ~p ~p ~p", [sockname(Tmpl), peername(Tmpl), Key]),
-    true = ets:insert_new(?MODULE, {Key, self()}),
-    link(Owner),
-    {ok, State}.
+    case ets:insert_new(?MODULE, {Key, self()}) of
+        true ->
+            link(Owner),
+            {ok, State};
+        false ->
+            {stop, eaddrinuse}
+    end.
 
 reply(Reply, State) ->
     reply(should_exit(State), should_hibernate(State), Reply, State).
