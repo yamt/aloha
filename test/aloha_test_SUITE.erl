@@ -214,15 +214,19 @@ tcp_recv_timeout(Config) ->
         aloha_nic_lossyloopback -> 4000;  % chosen to deal with two loss
         _ -> 0
     end,
+    ct:pal("wait for short result"),
     {ok, Msg} = case recv(Sock, MsgSize * 2, Timeout2, Config) of
-        {ok, Msg} = Ret -> Ret;
+        {ok, _} = Ret -> Ret;
         {error, timeout} ->
             ct:pal("trying longer timeout"),
             recv(Sock, MsgSize * 2, Timeout2 * 5, Config)
     end,
+    ct:pal("wait for timeout"),
     {error, timeout} = recv(Sock, MsgSize * 2, Timeout, Config),
+    ct:pal("wait for fin"),
     ok = aloha_socket:shutdown(Sock, write),
     {error, closed} = recv(Sock, MsgSize, Timeout2, Config),
+    ct:pal("close the socket"),
     ok = aloha_socket:close(Sock),
     tcp_cleanup(Sock).
 
