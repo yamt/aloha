@@ -128,8 +128,6 @@ reply_rst(Tcp, Stack, Data, Opts) ->
 send_packet(Pkt, NS, Backend) ->
     [_, _, Tcp, Data] = Pkt,
     lager:info("SEND ~s", [tcp_summary(Tcp, Data)]),
-%   [aloha_neighbor:send_packet(Pkt, Backend) ||
-%    random:uniform() > 0.5],  % drop packets for testing
     aloha_neighbor:send_packet(Pkt, NS, Backend).
 
 flag(1, C) ->
