@@ -36,7 +36,8 @@
 
 handle(tcp, Pkt, Stack, Opts) ->
     [_Ip, _Ether] = Stack,
-    {Tcp, bin, Data} = aloha_packet:decode(tcp, Pkt, Stack),
+    EncOpts = [{lookup_key, {aloha_keydb, lookup_key, []}}],
+    {Tcp, bin, Data} = aloha_packet:decode(tcp, Pkt, Stack, EncOpts),
     handle_tcp(Tcp, Stack, Data, Opts).
 
 % Key is either of Port or {IP, Port}
