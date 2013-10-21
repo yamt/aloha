@@ -25,21 +25,30 @@
 -module(aloha_keydb).
 
 -export([lookup_key/2]).
--export([register_peer_key/2]).
+-export([register_peer_key/3]).
 
 -include_lib("aloha_packet/include/aloha_packet.hrl").
 
+-define(TABLE, ?MODULE).
+
 lookup_key(#ip{dst = Dst}, encode) ->
-    lookup_peer_key(Dst);
+    lookup_peer_key(ip, Dst);
 lookup_key(#ip{src = Src}, decode) ->
-    lookup_peer_key(Src);
+    lookup_peer_key(ip, Src);
 lookup_key(#ipv6{dst = Dst}, encode) ->
-    lookup_peer_key(Dst);
+    lookup_peer_key(ipv6, Dst);
 lookup_key(#ipv6{src = Src}, decode) ->
-    lookup_peer_key(Src).
+    lookup_peer_key(ipv6, Src).
 
-lookup_peer_key(_Addr) ->
-    <<"hoge">>.
+lookup_peer_key(Proto, Addr) ->
+    try
+        ets:lookup_element(?TABLE, {peer, Proto, Addr}, 2)
+    catch
+        error:badarg ->
+            lager:info("NO KEY for ~p ~p", [Proto, Addr]), 
+            error(no_key)
+    end.
 
-register_peer_key(_Addr, _Key) ->
-    ok.
+register_peer_key(Proto, Addr, Key) ->
+    lager:info("KEY ~p for ~p ~p", [Key, Proto, Addr]), 
+    ets:insert(?TABLE, {{peer, Proto, Addr}, Key}).

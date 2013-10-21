@@ -52,9 +52,11 @@ handle_call(sockname, _From,
     {reply, {ok, {aloha_addr:to_ip(Addr), Port}}, State};
 handle_call(sockname, _From, #listen_state{key = {_NS, Port}} = State) ->
     {reply, {ok, {{0, 0, 0, 0}, Port}}, State};
-handle_call({setops, NewOpts}, _From, #listen_state{opts = Opts} = State) ->
+handle_call({setopts, NewOpts}, _From, #listen_state{opts = Opts} = State) ->
     State2 = State#listen_state{opts = aloha_utils:merge_opts(NewOpts, Opts)},
     {ok, State2};
+handle_call({getopts, OptKeys}, _From, #listen_state{opts = Opts} = State) ->
+    {reply, {ok, aloha_utils:acc_opts(OptKeys, Opts, [])}, State};
 handle_call(accept, From, State) ->
     lager:debug("user accept ~p", [From]),
     State2 = add_waiter(From, State),

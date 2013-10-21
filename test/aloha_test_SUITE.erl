@@ -74,22 +74,29 @@ groups() ->
         tcp_eaddrinuse
     ],
     Protocols = [
-        {group, ipv4},
+        {group, ip},
         {group, ipv6}
     ],
-    Modes = [
+    SyncModes = [
         {group, async},
         {group, sync}
     ],
-    [{all, [parallel], [
+    LoopbackModes = [
         {group, loopback},
         {group, lossyloopback}
-     ]},
-     {loopback, [parallel], Modes},
-     {lossyloopback, [parallel], Modes},
+    ],
+    Md5SigModes = [
+        {group, md5sig},
+        {group, nomd5sig}
+    ],
+    [{all, [], Md5SigModes},
+     {md5sig, [parallel], LoopbackModes},
+     {nomd5sig, [parallel], LoopbackModes},
+     {loopback, [parallel], SyncModes},
+     {lossyloopback, [parallel], SyncModes},
      {async, [parallel], Protocols},
      {sync,  [parallel], Protocols},
-     {ipv4, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests},
+     {ip, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests},
      {ipv6, [parallel, {repeat_until_any_fail, ?NREPEAT}], Tests}].
 
 init_per_suite(Config) ->
@@ -113,6 +120,10 @@ end_per_suite(_Config) ->
 
 init_per_group(all, Config) ->
     Config;
+init_per_group(md5sig, Config) ->
+    [{md5sig, [md5sig]}|Config];
+init_per_group(nomd5sig, Config) ->
+    [{md5sig, []}|Config];
 init_per_group(loopback, Config) ->
     [{loopback_mod, aloha_nic_loopback}, {namespace, loopback}|Config];
 init_per_group(lossyloopback, Config) ->
@@ -134,8 +145,8 @@ init_per_group(sync, Config) ->
     Config2 = [{mode, sync}, {namespace, NS2}|Config],
     Servers = start_servers(Config2),
     [{servers, Servers}, {loopback, Pid}|Config2];
-init_per_group(ipv4, Config) ->
-    [{proto, ipv4}, {ip, <<127,0,0,1>>}|Config];
+init_per_group(ip, Config) ->
+    [{proto, ip}, {ip, <<127,0,0,1>>}|Config];
 init_per_group(ipv6, Config) ->
     [{proto, ipv6}, {ip, <<1:128>>}|Config].
 
@@ -158,6 +169,10 @@ start_servers(Config) ->
 
 end_per_group(all, _Config) ->
     ok;
+end_per_group(md5sig, _Config) ->
+    ok;
+end_per_group(nomd5sig, _Config) ->
+    ok;
 end_per_group(loopback, _Config) ->
     ok;
 end_per_group(lossyloopback, _Config) ->
@@ -170,7 +185,7 @@ end_per_group(sync, Config) ->
     Pid = ?config(loopback, Config),
     Servers = ?config(servers, Config),
     kill_and_wait([Pid|Servers]);
-end_per_group(ipv4, _Config) ->
+end_per_group(ip, _Config) ->
     ok;
 end_per_group(ipv6, _Config) ->
     ok.
@@ -269,6 +284,7 @@ tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, MsgSize,
     NS = ?config(namespace, Config),
     Nic = ?config(loopback, Config),
     ActiveOpts = active_opts(Config),
+    Md5SigOpts = md5sig_opts(Config),
     {ok, Opts} = gen_server:call(Nic, getopts),
     Addr = proplists:get_value(addr, Opts),
     Mtu = proplists:get_value(mtu, Opts),
@@ -278,9 +294,13 @@ tcp_prepare(RemoteIPAddr, RemotePort, LocalIPAddr, LocalPort, MsgSize,
         auto -> choose_local_port(Config);
         Port -> Port
     end,
+    Proto = ?config(proto, Config),
+    aloha_keydb:register_peer_key(Proto, LocalIPAddr, <<"test_key">>),
+    aloha_keydb:register_peer_key(Proto, RemoteIPAddr, <<"test_key">>),
     case aloha_tcp:connect(NS, RemoteIPAddr, RemotePort, Addr, Backend,
                            [{ip, LocalIPAddr}, {port, LocalPort2},
-                            {mtu, Mtu}, {rcv_buf, MsgSize}|ActiveOpts]) of
+                            {mtu, Mtu}, {rcv_buf, MsgSize}]
+                           ++ ActiveOpts ++ Md5SigOpts) of
         {ok, Sock} ->
             PeerName = {aloha_addr:to_ip(RemoteIPAddr), RemotePort},
             {ok, PeerName} = aloha_socket:peername(Sock),
@@ -415,11 +435,16 @@ active_opts(Config) ->
         sync -> [{active, false}]
     end.
 
+md5sig_opts(Config) ->
+    ?config(md5sig, Config).
+
 tcp_server(NS, Port, Fun, Config) ->
     ActiveOpts = active_opts(Config),
+    Md5SigOpts = md5sig_opts(Config),
     {ok, Sock} = aloha_socket:listen({NS, Port},
                                      [binary, {packet, raw}, {reuseaddr, true},
-                                      {nodelay, true}|ActiveOpts]),
+                                      {nodelay, true}]
+                                      ++ ActiveOpts ++ Md5SigOpts),
     accept_loop(Sock, Fun, Config).
 
 accept_loop(LSock, Fun, Config) ->

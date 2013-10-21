@@ -66,6 +66,7 @@
     state :: atom(),
     owner :: none | pid(),
     active = false,
+    md5sig = false,
     suppress = false,
     pending_ctl = [],
     key,
@@ -88,6 +89,7 @@ start(Opts) ->
     gen_server:start(?MODULE, Opts, []).
 
 init(Opts) ->
+    lager:info("conn init ~p", [Opts]),
     false = process_flag(trap_exit, true),
     Backend = proplists:get_value(backend, Opts),
     Key = proplists:get_value(key, Opts),
@@ -111,6 +113,7 @@ init(Opts) ->
                        rcv_mss = MSS,
                        state = closed,
                        owner = Owner,
+                       md5sig = proplists:get_value(md5sig, Opts, false),
                        key = Key,
                        namespace = NS},
     lager:info("TCP init for ~p ~p ~p", [sockname(Tmpl), peername(Tmpl), Key]),
@@ -210,7 +213,7 @@ handle_call(get_owner_info, _From,
     reply({Owner, Active}, State).
 
 handle_cast({#tcp{}, _} = Msg, State) ->
-    segment_arrival(Msg, State);
+    md5_check(Msg, State);
 handle_cast({shutdown, read}, State) ->
     lager:info("TCP user shutdown read", []),
     State2 = shutdown_receiver(State),
@@ -542,6 +545,18 @@ segment_arrival({#tcp{} = Tcp, Data}, State) ->
     lager:info("TCP unimplemented datalen ~p~n~p", [byte_size(Data), pp(Tcp)]),
     noreply(State).
 
+md5_check({#tcp{options = Opts} = Tcp, _Data} = Seg,
+          #tcp_state{md5sig = Mode} = State) ->
+    case {proplists:get_value(md5, Opts), Mode} of
+        {undefined, false} ->
+            segment_arrival(Seg, State);
+        {good, true} ->
+            segment_arrival(Seg, State);
+        Value ->
+            lager:info("md5 sig check failed ~p ~p", [Value, Tcp]),
+            noreply(State)
+    end.
+
 next_state_on_close(established) -> fin_wait_1;
 next_state_on_close(syn_received) -> fin_wait_1;
 next_state_on_close(syn_sent) -> closed;
@@ -711,7 +726,7 @@ build_and_send_packet(Syn, Data, Fin, Win,
         ack = Ack,
         psh = push(Syn, Data, Fin, State),
         window = Win,
-        options = [{mss, RMSS} || Syn =:= 1]
+        options = [{mss, RMSS} || Syn =:= 1] ++ TcpTmpl#tcp.options
     },
     lager:debug("TCP send datalen ~p~n~p~n~p",
                 [byte_size(Data), pp(Tcp), pp(State)]),
@@ -1044,6 +1059,8 @@ setopt({binary, true}, State) ->
     State;
 setopt({active, Mode}, State) ->
     State#tcp_state{active = Mode};
+setopt({md5sig, Mode}, State) ->
+    State#tcp_state{md5sig = Mode};
 setopt(Opt, _State) ->
     lager:info("unsupported setopts ~p", [Opt]),
     {error, einval}.

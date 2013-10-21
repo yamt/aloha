@@ -38,11 +38,19 @@ handle(tcp, Pkt, Stack, Opts) ->
     [_Ip, _Ether] = Stack,
     EncOpts = [{lookup_key, {aloha_keydb, lookup_key, []}}],
     {Tcp, bin, Data} = aloha_packet:decode(tcp, Pkt, Stack, EncOpts),
-    handle_tcp(Tcp, Stack, Data, Opts).
+    case proplists:get_value(md5, Tcp#tcp.options) of
+        undefined ->
+            handle_tcp(Tcp, Stack, Data, Opts);
+        good ->
+            handle_tcp(Tcp, Stack, Data, Opts);
+        Error ->
+            lager:info("TCP bad md5 sig ~p ~w", [Error, Tcp])
+    end.
 
 % Key is either of Port or {IP, Port}
 listen(Key, Opts) ->
     {ok, Pid} = aloha_tcp_listener:start_link(Key, Opts),
+    lager:info("listen ~p key ~p Opts ~p", [Pid, Key, Opts]),
     {ok, {aloha_socket, Pid}}.
 
 listener_key({NS, {_SrcIp, DstIp, _SrcPort, DstPort}}) ->
@@ -66,7 +74,8 @@ make_reply_template(Tcp, Stack) ->
     % swap dst and src
     [Ether#ether{dst = Ether#ether.src, src = Ether#ether.dst},
      make_reply_template(Ip),
-     #tcp{dst_port = Tcp#tcp.src_port, src_port = Tcp#tcp.dst_port}].
+     #tcp{dst_port = Tcp#tcp.src_port, src_port = Tcp#tcp.dst_port,
+          options = aloha_utils:acc_opts([md5], Tcp#tcp.options, [])}].
 
 new_connection(#tcp{syn = 0}, _, _, _) ->
     none;
@@ -83,7 +92,10 @@ new_connection(Tcp, Stack, Key, Opts, Listener) ->
     % create new connection process
     Opts2 = [{template, make_reply_template(Tcp, Stack)},
              {owner, Listener}, {key, Key} | Opts],
-    {ok, NewPid} = aloha_tcp_conn:start(Opts2),
+    {ok, Opts3} = aloha_socket:getopts({aloha_socket, Listener}, [md5sig]),
+    Opts4 = Opts2 ++ Opts3,
+    {ok, NewPid} = aloha_tcp_conn:start(Opts4),
+    lager:info("new conn ~p opts ~p", [NewPid, Opts4]),
     NewPid.
 
 handle_tcp(#tcp{checksum=good} = Tcp, Stack, Data, Opts) ->
@@ -146,6 +158,12 @@ connect(NS, RAddr0, RPort, L1Src, Backend, Opts) ->
         4 -> ip
     end,
     Key = {NS, {RAddr, LAddr, RPort, LPort}},
+    TcpOptions = case proplists:get_value(md5sig, Opts, false) of
+        true ->
+            [{md5, dummy}];
+        false ->
+            []
+    end,
     Opts2 = [{owner, self()},
              {addr, L1Src},
              {mtu, Mtu},
@@ -153,9 +171,10 @@ connect(NS, RAddr0, RPort, L1Src, Backend, Opts) ->
              {backend, Backend},
              {key, Key},
              {template,
-                 make_template(Proto, RAddr, RPort, LAddr, LPort, L1Src)},
+                 make_template(Proto, RAddr, RPort, LAddr, LPort, L1Src,
+                               TcpOptions)},
              {namespace, NS}],
-    Opts3 = aloha_utils:acc_opts([rcv_buf, snd_buf], Opts, Opts2),
+    Opts3 = aloha_utils:acc_opts([rcv_buf, snd_buf, md5sig], Opts, Opts2),
     case aloha_tcp_conn:start(Opts3) of
         {ok, Pid} ->
             connect(Pid, Opts);
@@ -184,10 +203,11 @@ connect_wait(Sock) ->
         {tcp_error, Sock, Reason} -> {error, Reason}
     end.
 
-make_template(Proto, Dst, DstPort, Src, SrcPort, L1Src) ->
+make_template(Proto, Dst, DstPort, Src, SrcPort, L1Src, TcpOptions) ->
     [#ether{dst = <<0,0,0,0,0,0>>, src = L1Src, type = Proto},
      make_l2_template(Proto, Dst, Src),
-     #tcp{src_port = SrcPort, dst_port = DstPort}].
+     #tcp{src_port = SrcPort, dst_port = DstPort,
+          options = TcpOptions}].
 
 make_l2_template(ip, Dst, Src) ->
     #ip{dst = Dst, src = Src, protocol = tcp};

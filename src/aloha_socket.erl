@@ -25,7 +25,8 @@
 -module(aloha_socket).
 
 -export([listen/2, accept/1]).
--export([controlling_process/2, setopts/2, send/2, recv/2, recv/3, close/1,
+-export([controlling_process/2, setopts/2, getopts/2,
+         send/2, recv/2, recv/3, close/1,
          shutdown/2, peername/1, sockname/1]).
 -export([force_close/1]).
 
@@ -47,6 +48,11 @@ setopts({aloha_socket, SockPid}, Opts) ->
     call(SockPid, {setopts, Opts});
 setopts(Sock, Opts) ->
     inet:setopts(Sock, Opts).
+
+getopts({aloha_socket, SockPid}, Opts) ->
+    call(SockPid, {getopts, Opts});
+getopts(Sock, Opts) ->
+    inet:getopts(Sock, Opts).
 
 send({aloha_socket, SockPid}, Data) ->
     call(SockPid, {send, iolist_to_binary(Data)});

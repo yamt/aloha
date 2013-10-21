@@ -28,9 +28,11 @@
 init_tables() ->
     ets:new(aloha_nic, [set, named_table, public]),
     ets:new(aloha_tcp_conn, [set, named_table, public]),
-    ets:new(aloha_tcp_listener, [set, named_table, public]).
+    ets:new(aloha_tcp_listener, [set, named_table, public]),
+    ets:new(aloha_keydb, [set, named_table, public]).
 
 fini_tables() ->
     ets:delete(aloha_nic),
     ets:delete(aloha_tcp_conn),
-    ets:delete(aloha_tcp_listener).
+    ets:delete(aloha_tcp_listener),
+    ets:delete(aloha_keydb).

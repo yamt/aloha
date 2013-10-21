@@ -53,7 +53,13 @@ handle_cast({packet, Pkt}, State) ->
     {noreply, State};
 handle_cast({Type, Pkt, Stack}, State) ->
     Mod = ethertype_mod(Type),
-    Mod:handle(Type, Pkt, Stack, State#state.opts),
+    try Mod:handle(Type, Pkt, Stack, State#state.opts)
+    catch
+        error:badmatch ->
+            % probably packet decoding error
+            lager:info("can't decode pkt ~p ~p ~p", [Type, Pkt, Stack]),
+            ok
+    end,
     {noreply, State};
 handle_cast({send_packet, Pkt}, #state{opts = Opts} = State) ->
     Backend = proplists:get_value(backend, Opts),
@@ -97,11 +103,12 @@ send_packet(BinPkt, Backend) when is_binary(BinPkt) ->
     apply(M, F, [BinPkt|A]);
 send_packet(Pkt, Backend) ->
     EncOpts = [{lookup_key, {aloha_keydb, lookup_key, []}}],
-    BinPkt = try aloha_packet:encode_packet(Pkt, EncOpts)
+    BinPkts = try
+        [aloha_packet:encode_packet(Pkt, EncOpts)]
     catch
         error:Error ->
             lager:error("failed to encode packet ~p with ~p",
                         [aloha_utils:pr(Pkt, ?MODULE), Error]),
-            <<>>
+            []
     end,
-    send_packet(BinPkt, Backend).
+    [send_packet(BinPkt, Backend) || BinPkt <- BinPkts].

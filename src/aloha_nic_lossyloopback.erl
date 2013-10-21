@@ -47,7 +47,8 @@ loopback(BinPkt, Key) ->
     Rand = crypto:rand_uniform(0, 100),
     if
         Rand < DropRate ->
-            Pkt = aloha_packet:decode_packet(BinPkt),
+            EncOpts = [{lookup_key, {aloha_keydb, lookup_key, []}}],
+            Pkt = aloha_packet:decode_packet(BinPkt, EncOpts),
             lager:info("lossy loopback drop pkt ~p",
                        [aloha_utils:pr(Pkt, aloha_tcp)]),
             ok;  % drop
