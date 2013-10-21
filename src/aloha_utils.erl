@@ -75,3 +75,23 @@ bin_or(Bin1, Bin2) ->
     <<Int1:Size/unit:8>> = Bin1,
     <<Int2:Size/unit:8>> = Bin2,
     <<(Int1 bor Int2):Size/unit:8>>.
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+normalize_opts_test() ->
+    ?assertEqual([], normalize_opts([])),
+    ?assertEqual([{a,true}], normalize_opts([a])),
+    ?assertEqual([{b,1}], normalize_opts([{b,1}])),
+    ?assertEqual([{a,true},{b,true},{c,true},{d,true}],
+                 normalize_opts([a,b,c,b,d,a])).
+
+acc_opts_test() ->
+    ?assertEqual([], acc_opts([hoge], [], [])),
+    ?assertEqual([fuga], acc_opts([hoge], [], [fuga])),
+    ?assertEqual([{hoge,1}], acc_opts([hoge], [{hoge,1}], [])),
+    ?assertEqual([{hoge,1},fuga], acc_opts([hoge], [{hoge,1}], [fuga])),
+    ?assertEqual([{hoge,true},fuga], acc_opts([hoge], [a,hoge,c], [fuga])),
+    ?assertEqual([{hoge,true}], acc_opts([hoge], [a,{hoge,true},c], [])).
+
+-endif.
