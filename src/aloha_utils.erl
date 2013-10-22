@@ -83,8 +83,10 @@ normalize_opts_test() ->
     ?assertEqual([], normalize_opts([])),
     ?assertEqual([{a,true}], normalize_opts([a])),
     ?assertEqual([{b,1}], normalize_opts([{b,1}])),
-    ?assertEqual([{a,true},{b,true},{c,true},{d,true}],
-                 normalize_opts([a,b,c,b,d,a])).
+    ?assertEqual([{a,true},{b,true},{c,9},{d,true}],
+                 normalize_opts([a,b,{c,9},b,d,a])),
+    ?assertEqual([{a,true},{b,true},{c,9},{d,true}],
+                 normalize_opts([b,b,d,{c,9},a,a])).
 
 acc_opts_test() ->
     ?assertEqual([], acc_opts([hoge], [], [])),
