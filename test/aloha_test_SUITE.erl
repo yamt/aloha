@@ -54,8 +54,14 @@
 suite() ->
     [{timetrap, timetrap()}].
 
-timetrap() ->
+is_travis() ->
     case os:getenv("TRAVIS") of
+        false -> false;
+        _ -> true
+    end.
+
+timetrap() ->
+    case is_travis() of
         false -> 20000;
         _ -> 1800000
     end.
@@ -109,6 +115,12 @@ init_per_suite(Config) ->
         ]}]),
     lager:start(),
     lager:set_loglevel(lager_file_backend, "console.log", warning),
+    % travis-ci has 4MB output limit
+    ConsoleLogLevel = case is_travis() of
+        true -> warning;
+        false -> info
+    end,
+    lager:set_loglevel(lager_console_backend, ConsoleLogLevel),
     application:start(sasl),
     ok = aloha:start(),
     proc_lib:spawn(fun neighbor_flusher/0),
