@@ -22,6 +22,28 @@
 % OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 % SUCH DAMAGE.
 
+% this module implements NIC server.
+
+% messages (gen_server cast)
+% {packet, Pkt}
+%    reception of a ethernet frame.
+%    Pkt is a binary which contains an ethernet frame.
+% {send_packet, Pkt}
+%    request to transmit a ethernet frame.
+
+% important properties:
+% {backend, {M,F,A}}
+%    function to transmit a ethernet frame via this nic.
+%    called as apply(M,F,[BinPkt|A]).
+
+% there are a few ways to transmit a frame.
+% send_packet/2, w/ NIC server Pid specified
+%    this casts a message to the server to make it call send_packet/2
+%    with its backend.
+% send_packet/2, w/ Backend specified
+%    intended to be used by protocol stack (eg. tcp) where the backend
+%    is known via Opts.  this doesn't involve NIC server and thus fast.
+
 -module(aloha_nic).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
