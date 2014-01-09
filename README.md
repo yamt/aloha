@@ -23,6 +23,23 @@ aloha provides an API similar to gen_tcp/inet.
 See [aloha_demo](https://github.com/yamt/aloha_demo) for an example
 to run cowboy/ranch on aloha.
 
+Implemented features
+--------------------
+- Basic gen_tcp/inet-like API
+- TCP
+    - Active and Passive connections
+    - Retransmit
+    - Delayed ACK
+    - RTT estimate
+    - MD5 signature
+- IP
+    - ARP
+    - ICMP
+- IPv6
+    - NDP
+    - ICMPv6
+- Virtual NIC
+
 TODO
 ----
 
