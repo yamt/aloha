@@ -45,11 +45,11 @@ handle_ipv6(#ipv6{dst = Mcast} = Ip, Next, Rest, _IpAddr, Mcast, Stack, Opts) ->
 handle_ipv6(Ip, _Next, _Rest, _IpAddr, _Mcast, _Stack, _Opts) ->
     lager:info("not ours ~p", [aloha_utils:pr(Ip, ?MODULE)]).
 
-% compute solicited-node multicast address (RFC 2323)
+% compute solicited-node multicast address (RFC 4291 2.7.1.)
 solicited_node_multicast(Addr) ->
     <<_:104, Tail:24>> = Addr,
     <<16#ff02:16, 0:16, 0:16, 0:16, 0:16, 1:16, 16#ff:8, Tail:24>>.
 
-% RFC 2424 7.
+% RFC 2464 7.
 multicast_ether(<<_:(12*8), A, B, C, D>>) ->
     <<16#33, 16#33, A, B, C, D>>.
