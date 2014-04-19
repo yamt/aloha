@@ -43,6 +43,7 @@ Implemented features
 TODO
 ----
 
+- implement "congested" loopback variant for testing
 - user timeout
 - rto backoff
 - exit_on_close
